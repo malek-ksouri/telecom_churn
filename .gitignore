@@ -1,0 +1,29 @@
+# Environnements Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Secrets
+.env
+
+# Données et sorties générées (non versionnées)
+data/
+artifacts/
+models/*.joblib
+mlruns/
+.dvc/cache/
+
+# Frontend
+node_modules/
+frontend/dist/
+
+# Divers
+*.csv
+Thumbs.db
+.vscode/
+CLAUDE.md

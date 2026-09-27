@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "churn"
+version = "0.1.0"
+description = "Prédiction du churn télécom : pipeline ML calibré, SHAP, scoring métier, API et assistant IA"
+readme = "README.md"
+requires-python = ">=3.11,<3.12"
+# Les versions figées sont dans requirements.txt (source de vérité pour l'environnement).
+# Ici seulement ce dont le package a besoin pour être importé.
+dependencies = ["pandas", "pyyaml", "pydantic"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["venv", "notebooks", "frontend"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

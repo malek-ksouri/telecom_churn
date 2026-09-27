@@ -1,0 +1,41 @@
+# Configuration centrale du projet Telecom Churn.
+# Chargée par src/churn/config.py. Tous les chemins sont relatifs à la racine du repo
+# et convertis en chemins absolus au chargement : aucun chemin en dur dans le code.
+
+project_name: telecom-churn
+random_state: 42
+
+paths:
+  raw_dir: data/raw
+  interim_dir: data/interim
+  processed_dir: data/processed
+  models_dir: models
+  artifacts_dir: artifacts
+  reports_dir: reports
+  figures_dir: reports/figures
+  docs_dir: docs
+
+data:
+  raw_file: telco_churn.csv          # nom réel du CSV dans data/raw/
+  target: churn
+  id_col: Customer_ID
+  # Colonnes jamais utilisées comme variables explicatives (en plus de la cible et de l'ID).
+  # ethnic : raison éthique et réglementaire (décision D4).
+  excluded_features:
+    - ethnic
+  test_size: 0.2                     # split 80/20 stratifié, fait AVANT l'EDA (D1)
+  train_file: train.parquet
+  test_file: test.parquet            # lu uniquement à l'évaluation finale (E9)
+
+modeling:
+  cv_folds: 5
+
+business:
+  # HYPOTHÈSE : taux de churn réel d'un opérateur, utilisé pour corriger le prior
+  # (le dataset est échantillonné à ~50/50, ce qui gonfle les probabilités).
+  # Ce n'est PAS une donnée du dataset. À citer comme hypothèse à l'oral.
+  real_churn_rate:
+    value: 0.02
+    unit: par mois
+    is_hypothesis: true
+    source: "Hypothèse de travail (ordre de grandeur usuel du churn mensuel télécom), non issue des données"
