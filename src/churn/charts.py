@@ -453,3 +453,43 @@ def ablation_chart(summary: pd.DataFrame, reference: str, title: str,
                       xaxis_title="gain d'AUC par rapport à la référence (millièmes)")
     fig.update_yaxes(type="category", autorange="reversed")
     return fig
+
+
+def coefficient_chart(coefs: pd.Series, title: str) -> go.Figure:
+    """Coefficients signés (variables standardisées) : rouge = augmente le churn, bleu = le réduit.
+
+    Le signe est aussi écrit sur chaque barre : la couleur n'est jamais seule porteuse du sens.
+    """
+    c = coefs.iloc[::-1]
+    fig = go.Figure(go.Bar(
+        x=c.to_numpy(), y=list(c.index), orientation="h",
+        marker_color=[DIVERGING[-1][1] if v > 0 else DIVERGING[0][1] for v in c],
+        text=[f"{v:+.3f}" for v in c], textposition="outside", cliponaxis=False,
+        hovertemplate="%{y}<br>coefficient %{x:+.3f}<extra></extra>",
+    ))
+    lim = float(np.abs(c).max()) * 1.3
+    fig.add_vline(x=0, line_color=INK_SECONDARY, line_width=1)
+    fig.update_layout(title=title, height=28 * len(c) + 170, xaxis_range=[-lim, lim],
+                      xaxis_title="coefficient en log-odds (continues : par écart-type ; "
+                                  "indicateurs : de 0 à 1) ; > 0 : plus de churn")
+    fig.update_yaxes(type="category")
+    return fig
+
+
+def spline_effect_chart(effects: dict[str, pd.Series], title: str,
+                        x_titles: dict[str, str] | None = None) -> go.Figure:
+    """Effet appris par les splines (contribution au log-odds) : un panneau par variable."""
+    names = list(effects)
+    fig = make_subplots(rows=1, cols=len(names), subplot_titles=names, horizontal_spacing=0.1)
+    for i, name in enumerate(names):
+        s = effects[name]
+        hover = f"{name} = %{{x}}<br>effet %{{y:+.2f}}<extra></extra>"
+        fig.add_trace(go.Scatter(x=s.index, y=s.to_numpy(), mode="lines", showlegend=False,
+                                 line={"color": ACCENT, "width": 2}, hovertemplate=hover),
+                      row=1, col=i + 1)
+        fig.add_hline(y=0, line_color=INK_SECONDARY, line_width=1, row=1, col=i + 1)
+        fig.update_xaxes(title_text=(x_titles or {}).get(name, name), row=1, col=i + 1)
+    fig.update_yaxes(title_text="contribution au log-odds (centrée)", col=1)
+    fig.update_annotations(font_size=11, font_color=INK_SECONDARY)
+    fig.update_layout(title=title, height=440)
+    return fig

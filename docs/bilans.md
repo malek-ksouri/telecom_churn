@@ -330,3 +330,49 @@ Un bilan par étape (E1 à E19), au format défini dans `CLAUDE.md`. Les chiffre
 - Écart-type de l'AUC entre folds d'environ 0,004-0,005 : des écarts de moins de 5 millièmes entre modèles ne seront pas interprétables sans comparaison appariée.
 
 **Étape suivante** : E7 — Pipeline + baselines (Dummy, régression logistique, arbre, forêt aléatoire), comparés sur les mêmes folds et au benchmark par règles (AUC 0,617).
+
+## Bilan — Étape 7 : Pipeline de prétraitement et baselines
+
+**Fait** :
+- `churn.evaluation.metrics` (AUC, PR-AUC, Brier, lift / Precision / Recall à 5-10-20 %, résumé par fold) et `churn.models.train.cross_validate_model` (métriques de validation, AUC train, prédictions hors fold)
+- Baselines sur les folds de E6 : `DummyClassifier(stratified)`, règles E4 (`SegmentRateClassifier`, taux appris dans chaque fold), LR simple de E6
+- `churn.models.preprocessing` : LR améliorée entièrement dans le pipeline (log, winsorisation apprise, standardisation, imputation + indicateurs, splines, one-hot 1 %, branche binaire séparée), ablation et grille L1 / L2 × C
+- `churn.models.factory.build_pipeline(model_name)` : 8 modèles, dont arbres et boosting (NaN conservés, catégorielles ordinales ou natives), pour E8
+- `notebooks/05_modeling.ipynb` (1re partie) : fuite démontrée, ablation, deux défauts corrigés et mesurés, tableau comparatif, gain fold par fold, coefficients et splines
+
+**Fichiers** :
+- Créés : `src/churn/evaluation/metrics.py`, `src/churn/models/{train,baselines,preprocessing,factory}.py`, `notebooks/05_modeling.ipynb`, `tests/test_modeling.py` (7 tests), `tests/test_factory.py` (10 tests), `reports/figures/05_*.png` (3)
+- Modifiés : `src/churn/charts.py` (coefficients, effet des splines, ablation), `docs/decisions.md`
+
+**Résultats clés** (5 folds figés, moyenne ± écart-type) :
+
+| Modèle | AUC | PR-AUC | lift@10 % | Precision@10 % | Brier | AUC train | Gain sur les règles |
+|---|---|---|---|---|---|---|---|
+| Dummy | 0,503 ± 0,002 | 0,497 | 1,01 | 49,9 % | 0,497 | 0,499 | −114,3 ± 4,1 |
+| Règles E4 | 0,617 ± 0,004 | 0,584 | 1,31 | 64,8 % | 0,239 | 0,617 | référence |
+| LR simple (E6) | 0,654 ± 0,004 | 0,626 | 1,40 | 69,4 % | 0,232 | 0,659 | +37,4 ± 3,6 |
+| **LR améliorée** | **0,668 ± 0,004** | **0,648** | **1,49** | **74,0 %** | **0,229** | 0,671 | **+50,8 ± 1,7 (5/5)** |
+
+- Ablation (gain cumulé sur la LR simple) : prétraitement de base +2,8 ; + log et winsorisation +11,3 ; + splines +14,9 ; C retenu par la règle de l'écart-type +13,5 millièmes. Indicateurs de manquant par colonne : +1,4 ± 0,4
+- Grille : 0,6627 à 0,6694 ; L1 et L2 à égalité ; retenu L2, C = 0,01
+- Défauts corrigés : AUC inchangée ; 8 colonnes constantes → 0 ; valeur max 253 → 65 ; L1 86 s → 35 s par fold
+- Fuite de l'encodage par la cible : +0,4 millième (segments grands)
+- Top coefficients : `handset_old` +0,57, `in_contract_end` +0,54, `mou_Mean` −0,37, `avgqty` +0,32 (baisse d'usage à usage récent égal), `crclscod_EA` −0,27 ; tous cohérents avec l'EDA
+- Chiffres identiques à ceux attendus (0,50 ; 0,617 ; 0,654 ; 0,668) : aucun écart au-delà de 0,3 millième
+- Tests : 72 passed ; ruff : OK
+
+**Décisions et justification** : D59 à D66 dans `docs/decisions.md`.
+
+**À savoir défendre à l'oral** :
+- *Où serait la fuite si l'imputation, la winsorisation ou l'encodage étaient faits avant le découpage ?* Médiane, quantiles d'écrêtage, moyenne et écart-type, modalités retenues : tout serait calculé en incluant les clients du fold de validation, que le modèle est censé ne pas connaître. Pour un encodage par la cible, c'est pire : le churn du client entre dans son propre score. L'effet est toujours dans le sens de l'optimisme.
+- *Pourquoi C = 0,01 et pas la meilleure AUC ?* La grille est plate : les écarts (≤ 1,8 millième) sont sous l'écart-type entre folds (3,8). Entre des modèles indiscernables, on prend le plus régularisé, dont les coefficients sont stables.
+- *Comment avez-vous trouvé les deux défauts, alors que l'AUC ne bougeait pas ?* En contrôlant les sorties intermédiaires : 8 coefficients exactement nuls ont révélé des colonnes constantes, puis une exécution anormalement longue a révélé des valeurs standardisées énormes. L'AUC seule ne suffit pas à valider un prétraitement.
+
+**Limites / points ouverts** :
+- LightGBM par défaut fait encore mieux (0,690 en E6) : 22 millièmes d'écart, objet de E8.
+- `add_indicator` réintroduit le signal « déjà parti » (D66) : à neutraliser dans le test de fuite D32.
+- Indicateurs en double (`manquant_hnd_price` et `missingindicator_hnd_price`) : le coefficient se partage entre deux colonnes identiques ; sans effet sur l'AUC, à garder en tête pour l'interprétation.
+- Brier et lift calculés sur l'échantillon équilibré : la calibration réelle est traitée en E10.
+- La cause exacte du dépassement de 90 minutes n'a pas été mesurée directement (seule la configuration L1, C = 1 l'a été).
+
+**Étape suivante** : E8 — Modèles avancés (arbre, forêt aléatoire, LightGBM, CatBoost) via `build_pipeline`, test de fuite D32 / D66, comparaison appariée avec la LR améliorée.
