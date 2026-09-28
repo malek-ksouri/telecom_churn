@@ -56,6 +56,8 @@ class Hypothesis(BaseModel):
     unit: str
     is_hypothesis: bool
     source: str
+    target_window: str | None = None
+    sensitivity: list[float] = Field(default_factory=list)
 
 
 class BusinessConfig(BaseModel):

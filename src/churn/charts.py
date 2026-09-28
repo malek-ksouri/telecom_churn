@@ -342,3 +342,83 @@ def pca_facets(coords: pd.DataFrame, labels: pd.Series, title: str,
     fig.update_annotations(font_size=11, font_color=INK_SECONDARY)
     fig.update_layout(title=title, height=330 * n_rows + 120)
     return fig
+
+
+def importance_chart(table: pd.DataFrame, title: str, top: int = 25) -> go.Figure:
+    """Variables classées par information mutuelle, étiquetées par effet et écart entre classes.
+
+    Args:
+        table: sortie de ``stats.univariate_table`` (triée par information mutuelle).
+    """
+    t = table.head(top).iloc[::-1]
+    text = [f"effet {e:+.3f} · écart {s:.0f} pts" if m == "rank-biserial"
+            else f"V {e:.3f} · écart {s:.0f} pts"
+            for e, s, m in zip(t["effet"], t["ecart_classes_pts"], t["mesure_effet"],
+                               strict=True)]
+    fig = go.Figure(go.Bar(
+        x=1000 * t["info_mutuelle"], y=list(t.index), orientation="h", marker_color=ACCENT,
+        text=text, textposition="outside", cliponaxis=False, textfont={"size": 10},
+        hovertemplate="%{y}<br>information mutuelle %{x:.2f} millinats<extra></extra>",
+    ))
+    fig.update_layout(title=title, xaxis_title="information mutuelle avec le churn (millinats)",
+                      height=26 * len(t) + 160,
+                      xaxis_range=[0, 1000 * t["info_mutuelle"].max() * 1.6])
+    fig.update_yaxes(type="category")
+    return fig
+
+
+def effect_vs_spread_chart(table: pd.DataFrame, title: str, label_top: int = 8,
+                           effect_threshold: float = 0.1, spread_threshold: float = 10.0
+                           ) -> go.Figure:
+    """Effet monotone |rank-biserial| contre écart entre déciles, pour les numériques.
+
+    La zone en haut à gauche (effet négligeable, écart > 10 pts) contient les variables
+    qu'une corrélation seule classerait à tort comme sans intérêt. Les points à courbe non
+    monotone sont pleins, les autres évidés : la forme n'est jamais portée par la couleur seule.
+    """
+    t = table[table["type"] == "numérique"]
+    fig = go.Figure()
+    fig.add_shape(type="rect", x0=0, x1=effect_threshold, y0=spread_threshold,
+                  y1=t["ecart_classes_pts"].max() * 1.08, fillcolor=GRID, opacity=0.5,
+                  line_width=0, layer="below")
+    for shape, symbol in [("monotone", "circle-open"), ("non monotone", "circle")]:
+        part = t[t["forme_courbe"] == shape]
+        fig.add_trace(go.Scatter(
+            x=part["effet_abs"], y=part["ecart_classes_pts"], mode="markers",
+            marker={"size": 9, "color": ACCENT, "symbol": symbol, "line": {"width": 1.5}},
+            name=f"courbe {shape}", text=list(part.index),
+            hovertemplate="%{text}<br>|r| = %{x:.3f}<br>écart %{y:.1f} pts<extra></extra>",
+        ))
+    top = t.nlargest(label_top, "ecart_classes_pts")
+    for var, row in top.iterrows():
+        fig.add_annotation(x=row["effet_abs"], y=row["ecart_classes_pts"], text=var,
+                           showarrow=False, xanchor="left", xshift=8,
+                           font={"size": 10, "color": INK_SECONDARY})
+    fig.add_vline(x=effect_threshold, line_dash="dash", line_color=INK_SECONDARY, line_width=1)
+    fig.add_hline(y=spread_threshold, line_dash="dash", line_color=INK_SECONDARY, line_width=1)
+    fig.update_layout(title=title, height=520,
+                      xaxis_title="effet monotone |rank-biserial|",
+                      yaxis_title="écart de churn entre déciles (points)")
+    return fig
+
+
+def dendrogram_chart(corr: pd.DataFrame, title: str, threshold: float = 0.9) -> go.Figure:
+    """Dendrogramme des variables (distance 1 - |ρ|, lien moyen), seuil de redondance tracé."""
+    import plotly.figure_factory as ff
+    from scipy.cluster.hierarchy import linkage
+    from scipy.spatial.distance import squareform
+
+    dist = (1 - corr.abs()).clip(lower=0).to_numpy()
+    fig = ff.create_dendrogram(
+        dist, orientation="left", labels=list(corr.columns),
+        distfun=lambda d: squareform(d, checks=False),
+        linkagefun=lambda d: linkage(d, method="average"),
+        colorscale=[ACCENT] * 8, color_threshold=0,
+    )
+    fig.add_vline(x=1 - threshold, line_dash="dash", line_color=CHURN, line_width=1.5,
+                  annotation_text=f"|ρ| = {threshold}", annotation_position="top",
+                  annotation_font_color=INK_SECONDARY)
+    fig.update_layout(title=title, template="churn", height=18 * len(corr) + 160,
+                      xaxis_title="distance 1 - |ρ| (lien moyen)", showlegend=False)
+    fig.update_yaxes(showgrid=False, tickfont={"size": 10})
+    return fig

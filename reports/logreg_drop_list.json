@@ -1,0 +1,189 @@
+{
+  "description": "Variables numériques à retirer pour la régression logistique (E7). Les modèles à arbres peuvent garder toutes les variables.",
+  "redondance_spearman_0_9": [
+    {
+      "variable": "mou_pead_Mean",
+      "representante": "peak_dat_Mean"
+    },
+    {
+      "variable": "mou_opkd_Mean",
+      "representante": "opk_dat_Mean"
+    },
+    {
+      "variable": "plcd_dat_Mean",
+      "representante": "comp_dat_Mean"
+    },
+    {
+      "variable": "mou_cdat_Mean",
+      "representante": "comp_dat_Mean"
+    },
+    {
+      "variable": "adjrev",
+      "representante": "totrev"
+    },
+    {
+      "variable": "models",
+      "representante": "phones"
+    },
+    {
+      "variable": "ccrndmou_Mean",
+      "representante": "custcare_Mean"
+    },
+    {
+      "variable": "cc_mou_Mean",
+      "representante": "custcare_Mean"
+    },
+    {
+      "variable": "vceovr_Mean",
+      "representante": "ovrrev_Mean"
+    },
+    {
+      "variable": "ovrmou_Mean",
+      "representante": "ovrrev_Mean"
+    },
+    {
+      "variable": "avg3rev",
+      "representante": "rev_Mean"
+    },
+    {
+      "variable": "avg6rev",
+      "representante": "rev_Mean"
+    },
+    {
+      "variable": "iwylis_vce_Mean",
+      "representante": "mouiwylisv_Mean"
+    },
+    {
+      "variable": "totmou",
+      "representante": "totcalls"
+    },
+    {
+      "variable": "adjmou",
+      "representante": "totcalls"
+    },
+    {
+      "variable": "adjqty",
+      "representante": "totcalls"
+    },
+    {
+      "variable": "avgmou",
+      "representante": "avgqty"
+    },
+    {
+      "variable": "avg3mou",
+      "representante": "mou_Mean"
+    },
+    {
+      "variable": "avg3qty",
+      "representante": "mou_Mean"
+    },
+    {
+      "variable": "avg6mou",
+      "representante": "mou_Mean"
+    },
+    {
+      "variable": "avg6qty",
+      "representante": "mou_Mean"
+    },
+    {
+      "variable": "owylis_vce_Mean",
+      "representante": "mouowylisv_Mean"
+    },
+    {
+      "variable": "mou_rvce_Mean",
+      "representante": "recv_vce_Mean"
+    },
+    {
+      "variable": "inonemin_Mean",
+      "representante": "recv_vce_Mean"
+    },
+    {
+      "variable": "mou_opkv_Mean",
+      "representante": "opk_vce_Mean"
+    },
+    {
+      "variable": "plcd_vce_Mean",
+      "representante": "attempt_Mean"
+    },
+    {
+      "variable": "comp_vce_Mean",
+      "representante": "attempt_Mean"
+    },
+    {
+      "variable": "peak_vce_Mean",
+      "representante": "attempt_Mean"
+    },
+    {
+      "variable": "complete_Mean",
+      "representante": "attempt_Mean"
+    },
+    {
+      "variable": "mou_peav_Mean",
+      "representante": "mou_cvce_Mean"
+    }
+  ],
+  "vif_sup_10": [
+    {
+      "variable": "totcalls",
+      "vif": 134.19
+    },
+    {
+      "variable": "comp_dat_Mean",
+      "vif": 47.76
+    },
+    {
+      "variable": "drop_blk_Mean",
+      "vif": 37.93
+    },
+    {
+      "variable": "attempt_Mean",
+      "vif": 33.89
+    },
+    {
+      "variable": "opk_vce_Mean",
+      "vif": 11.93
+    },
+    {
+      "variable": "totrev",
+      "vif": 11.85
+    }
+  ],
+  "toutes": [
+    "mou_pead_Mean",
+    "mou_opkd_Mean",
+    "plcd_dat_Mean",
+    "mou_cdat_Mean",
+    "adjrev",
+    "models",
+    "ccrndmou_Mean",
+    "cc_mou_Mean",
+    "vceovr_Mean",
+    "ovrmou_Mean",
+    "avg3rev",
+    "avg6rev",
+    "iwylis_vce_Mean",
+    "totmou",
+    "adjmou",
+    "adjqty",
+    "avgmou",
+    "avg3mou",
+    "avg3qty",
+    "avg6mou",
+    "avg6qty",
+    "owylis_vce_Mean",
+    "mou_rvce_Mean",
+    "inonemin_Mean",
+    "mou_opkv_Mean",
+    "plcd_vce_Mean",
+    "comp_vce_Mean",
+    "peak_vce_Mean",
+    "complete_Mean",
+    "mou_peav_Mean",
+    "totcalls",
+    "comp_dat_Mean",
+    "drop_blk_Mean",
+    "attempt_Mean",
+    "opk_vce_Mean",
+    "totrev"
+  ]
+}

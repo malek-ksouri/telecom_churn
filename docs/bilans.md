@@ -258,3 +258,40 @@ Un bilan par étape (E1 à E19), au format défini dans `CLAUDE.md`. Les chiffre
 
 5. **Pourquoi votre segmentation K-means sépare-t-elle moins bien le churn qu'une règle simple, et à quoi sert-elle alors ?**
    K-means ne voit pas la cible : il regroupe des clients qui se ressemblent, surtout par leur volume d'usage, faiblement lié au churn, et il ne capte pas le pic non monotone à 11-12 mois (AUC 0,544 contre 0,617 pour les règles). Elle sert à décrire la base clients en 5 profils lisibles et à adapter l'action de rétention au profil ; le ciblage du risque revient aux règles puis au modèle.
+
+## Bilan — Étape 5 : Analyse statistique
+
+**Fait** :
+- `churn.evaluation.stats` : Mann-Whitney + rank-biserial, χ² / Fisher + V de Cramér, écart entre classes et forme de la courbe, information mutuelle, Holm, redondance (Spearman, clustering hiérarchique, représentantes, VIF itératif), export des sorties
+- `churn.data.audit.missing_indicators` : un indicateur par motif de manquants (17), testés avec les 4 indicateurs `_was_negative`
+- `notebooks/03_statistical_analysis.ipynb` : démonstrations « p-value et taille d'échantillon » et « corrélation et effet non monotone », tableau final, redondance
+- D47 enregistrée (fenêtre de la cible ≈ 1 mois, taux mensuel 2 %, sensibilité 1-2-3 % en E10) et ajoutée à `configs/config.yaml`
+
+**Fichiers** :
+- Créés : `src/churn/evaluation/stats.py`, `notebooks/03_statistical_analysis.ipynb`, `tests/test_stats.py`, `reports/stats_univariate.csv`, `reports/top15_importance.csv`, `reports/logreg_drop_list.json`, `reports/figures/03_*.png` (3)
+- Modifiés : `src/churn/data/audit.py`, `src/churn/charts.py`, `src/churn/config.py`, `configs/config.yaml`, `docs/decisions.md`
+
+**Résultats clés** :
+- 118 tests (74 numériques, 20 catégorielles, 24 binaires) : **93 significatifs** après Holm, **116 effets négligeables**, 2 faibles (`eqpdays` r = +0,149, `hnd_price` r = −0,118), aucun moyen ou fort
+- p-value de `change_mou` : 0,03 à n = 500, 10⁻⁴⁹ à n = 80 000, pour un effet stable autour de −0,06
+- `months` : rank-biserial 0,053 (négligeable), mais V = 0,173 en 3 classes, écart entre déciles 28,7 pts et **1re en information mutuelle** (0,018 nat)
+- Top 4 par information mutuelle : `months`, `eqpdays`, `totmrc_Mean`, `hnd_price` ; au-delà, écarts de l'ordre du bruit de l'estimateur
+- 25 variables signalées « effet monotone négligeable, écart > 10 pts », dont 3 à courbe réellement non monotone
+- V de Cramér identiques à E4 (écart max 0,0005)
+- Redondance : 60 paires > 0,9, 17 groupes, 30 variables redondantes ; VIF : 6 retraits (max initial 134) ; **36 variables à retirer pour la régression logistique, 38 conservées (VIF max 6,7)**
+- Tests : 39 passed ; ruff : OK
+
+**Décisions et justification** : D47 à D53 dans `docs/decisions.md`.
+
+**À savoir défendre à l'oral** :
+- *Pourquoi les p-values ne suffisent-elles pas ?* Elles mesurent la probabilité d'observer un écart par hasard, pas son importance ; à effet constant, elles diminuent avec n (erreur-type en 1/√n). Avec 80 000 clients, 93 tests sur 118 sont significatifs alors que 116 effets sont négligeables.
+- *Comment une variable importante peut-elle avoir une corrélation nulle ?* Une corrélation (même de rang) mesure une tendance monotone. `months` a un pic à 11-12 mois : les deux côtés se compensent (r = 0,05). L'écart entre déciles et l'information mutuelle, qui est nulle seulement en cas d'indépendance, le détectent.
+- *Pourquoi retirer des variables pour la régression logistique et pas pour les arbres ?* La colinéarité rend les coefficients instables et ininterprétables (VIF jusqu'à 134) ; un arbre choisit une variable à chaque division et n'est pas affecté. Exemple : `totcalls` ≈ `avgqty` × `months`.
+
+**Limites / points ouverts** :
+- L'information mutuelle a une précision de l'ordre de 0,001 nat : le classement au-delà du 4e rang est indicatif.
+- L'information mutuelle favorise les effets touchant beaucoup de clients : un indicateur rare à fort effet (`manquant_change_mou_bloc`, +26,7 pts, 718 clients) est mal classé ; l'écart entre classes le signale.
+- Tout est calculé sur le train complet : pas de fuite pour le test final, mais le choix des variables en E6-E7 devra être validé en CV.
+- Le VIF ne porte que sur les numériques ; les catégorielles encodées et les indicateurs seront contrôlés dans le pipeline en E7.
+
+**Étape suivante** : E6 — Feature engineering (indicateurs de fin d'engagement, indicateurs de manquants par motif, transformations log, sur la base de `top15_importance.csv`).
