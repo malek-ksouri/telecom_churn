@@ -265,3 +265,80 @@ def correlation_heatmap(corr: pd.DataFrame, title: str) -> go.Figure:
     fig.update_xaxes(showgrid=False, tickangle=-45, type="category")
     fig.update_yaxes(showgrid=False, type="category")
     return fig
+
+
+def k_selection_chart(metrics: pd.DataFrame, chosen_k: int, title: str) -> go.Figure:
+    """Critères de choix de k en petits multiples (une courbe par critère, k retenu marqué)."""
+    panels = [
+        ("inertie", "Inertie (coude)"),
+        ("silhouette", "Silhouette (plus haut = mieux)"),
+        ("davies_bouldin", "Davies-Bouldin (plus bas = mieux)"),
+        ("ari_min", "Stabilité : ARI minimal entre 5 graines"),
+    ]
+    fig = make_subplots(rows=2, cols=2, subplot_titles=[p[1] for p in panels],
+                        horizontal_spacing=0.1, vertical_spacing=0.18)
+    for i, (col, _) in enumerate(panels):
+        row, c = divmod(i, 2)
+        fig.add_trace(go.Scatter(
+            x=metrics.index, y=metrics[col], mode="lines+markers", showlegend=False,
+            line={"color": ACCENT, "width": 2}, marker={"size": 8, "color": ACCENT},
+            hovertemplate="k = %{x}<br>" + col + " = %{y:.3f}<extra></extra>",
+        ), row=row + 1, col=c + 1)
+        fig.add_vline(x=chosen_k, line_dash="dash", line_color=INK_SECONDARY, line_width=1,
+                      row=row + 1, col=c + 1)
+        fig.update_xaxes(dtick=1, title_text="k", row=row + 1, col=c + 1)
+    fig.update_annotations(font_size=11, font_color=INK_SECONDARY)
+    fig.update_layout(title=title, height=620)
+    return fig
+
+
+def diverging_heatmap(values: pd.DataFrame, title: str, colorbar_title: str,
+                      limit: float | None = None, fmt: str = ".2f") -> go.Figure:
+    """Heatmap signée centrée sur 0 (ex. z-scores moyens par cluster), valeurs affichées."""
+    lim = limit or float(np.nanmax(np.abs(values.to_numpy())))
+    fig = go.Figure(go.Heatmap(
+        z=values.to_numpy(), x=[str(c) for c in values.columns], y=[str(i) for i in values.index],
+        zmin=-lim, zmax=lim, colorscale=DIVERGING, xgap=2, ygap=2,
+        text=values.to_numpy(), texttemplate="%{text:" + fmt + "}",
+        textfont={"size": 11, "color": INK},
+        colorbar={"title": {"text": colorbar_title}, "thickness": 12},
+        hovertemplate="%{y}<br>%{x} : %{z:" + fmt + "}<extra></extra>",
+    ))
+    fig.update_layout(title=title, height=70 * len(values) + 220, yaxis_autorange="reversed")
+    fig.update_xaxes(showgrid=False, type="category", tickangle=-30)
+    fig.update_yaxes(showgrid=False, type="category")
+    return fig
+
+
+def pca_facets(coords: pd.DataFrame, labels: pd.Series, title: str,
+               explained: tuple[float, float], cols: int = 3) -> go.Figure:
+    """Projection PCA 2D en petits multiples : un panneau par cluster (bleu) sur fond gris.
+
+    Un nuage unique à 5 couleurs dépasserait la limite de lisibilité des palettes
+    catégorielles en nuage de points ; un panneau par cluster reste lisible sans couleur.
+    """
+    groups = list(pd.unique(labels))
+    n_rows, n_cols = _grid(len(groups), cols)
+    fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=[str(g) for g in groups],
+                        horizontal_spacing=0.05, vertical_spacing=_vspace(n_rows) + 0.04,
+                        shared_xaxes=True, shared_yaxes=True)
+    x_title = f"PC1 ({100 * explained[0]:.0f} % de variance)"
+    y_title = f"PC2 ({100 * explained[1]:.0f} % de variance)"
+    for i, g in enumerate(groups):
+        row, c = divmod(i, n_cols)
+        mask = (labels == g).to_numpy()
+        fig.add_trace(go.Scattergl(x=coords.iloc[~mask, 0], y=coords.iloc[~mask, 1],
+                                   mode="markers", marker={"size": 3, "color": GRID},
+                                   hoverinfo="skip", showlegend=False),
+                      row=row + 1, col=c + 1)
+        fig.add_trace(go.Scattergl(x=coords.iloc[mask, 0], y=coords.iloc[mask, 1],
+                                   mode="markers", marker={"size": 3, "color": ACCENT,
+                                                           "opacity": 0.6},
+                                   name=str(g), showlegend=False,
+                                   hovertemplate=f"{g}<extra></extra>"),
+                      row=row + 1, col=c + 1)
+    fig.update_xaxes(title_text=x_title, row=n_rows)
+    fig.update_yaxes(title_text=y_title, col=1)
+    fig.update_annotations(font_size=11, font_color=INK_SECONDARY)
+    fig.update_layout(title=title, height=330 * n_rows + 120)
+    return fig

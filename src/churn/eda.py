@@ -275,3 +275,24 @@ def categorical_contrast(df: pd.DataFrame, columns: list[str], target: str = "ch
             "cramers_v": round(float(v), 3),
         })
     return pd.DataFrame(rows).set_index("variable").sort_values("cramers_v", ascending=False)
+
+
+def chi2_cramers_v(groups: pd.Series, y: pd.Series) -> dict[str, float]:
+    """Test du χ² d'indépendance groupe × cible et V de Cramér (taille d'effet)."""
+    from scipy.stats import chi2_contingency
+
+    table = pd.crosstab(groups.astype(str), y)
+    chi2, p, dof, _ = chi2_contingency(table, correction=False)
+    v = np.sqrt(chi2 / (table.to_numpy().sum() * (min(table.shape) - 1)))
+    return {"chi2": float(chi2), "ddl": int(dof), "p_value": float(p), "cramers_v": float(v)}
+
+
+UNSEGMENTED_LABEL = "Non segmenté"
+
+
+def rule_segment_labels(segments: pd.DataFrame) -> pd.Series:
+    """Étiquette texte « ancienneté | usage | terminal » ; « Non segmenté » si un axe manque."""
+    complete = segments.notna().all(axis=1)
+    labels = pd.Series(UNSEGMENTED_LABEL, index=segments.index, name="segment_regles")
+    labels[complete] = segments[complete].astype(str).agg(" | ".join, axis=1)
+    return labels
