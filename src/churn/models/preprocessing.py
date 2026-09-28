@@ -31,7 +31,8 @@ from sklearn.preprocessing import (
 )
 
 from churn.config import get_config
-from churn.features.build import FeatureBuilder
+from churn.data.validate import BINARY_COLUMNS, CATEGORICAL_COLUMNS
+from churn.features.build import MISSING_PATTERNS, FeatureBuilder
 from churn.models.pipelines import ColumnDropper, categories_as_text, non_feature_columns
 
 # Variables à queue droite très longue (asymétrie > 2 et valeurs >= 0 sur le train, critère
@@ -183,6 +184,7 @@ def make_improved_logreg_pipeline(
     add_indicator: bool = True,
     separate_binary: bool = True,
     keep_degenerate: bool = True,
+    dedupe_missing: bool = False,
     random_state: int | None = None,
 ) -> Pipeline:
     """Régression logistique améliorée, tout le prétraitement appris dans le pipeline.
@@ -204,10 +206,16 @@ def make_improved_logreg_pipeline(
             le défaut corrigé en E7 (binaires standardisés).
         keep_degenerate: ne pas écrêter une colonne dont les quantiles 1 % et 99 % sont
             égaux. ``False`` reproduit le défaut corrigé en E7 (indicateurs rares effacés).
+        dedupe_missing: retirer les ``manquant_*`` de la famille ``indicateurs_manquants``
+            dont l'information est déjà portée par ``add_indicator`` (source numérique) ou
+            par la modalité « Manquant » du one-hot (source catégorielle) : voir
+            :func:`duplicate_missing_indicators`.
     """
     cfg = get_config()
     seed = cfg.random_state if random_state is None else random_state
     groups = cfg.features.groups if groups is None else groups
+    if dedupe_missing:
+        drop = list(drop) + duplicate_missing_indicators(drop, add_indicator)
     special = (SPLINE_COLUMNS if splines else ()) + \
         ((LOG_COLUMNS + SIGNED_LOG_COLUMNS) if log_winsorize else ())
     opts = {"add_indicator": add_indicator, "keep_degenerate": keep_degenerate,
@@ -243,6 +251,24 @@ def make_improved_logreg_pipeline(
         ("model", LogisticRegression(C=C, l1_ratio=l1_ratio, solver=solver, max_iter=3000,
                                      random_state=seed)),
     ])
+
+
+def duplicate_missing_indicators(drop: Sequence[str], add_indicator: bool = True) -> list[str]:
+    """Indicateurs ``manquant_*`` redondants dans la régression logistique.
+
+    Un ``manquant_X`` est un doublon quand la colonne source X reste dans le modèle et que
+    son absence y est déjà codée : par ``add_indicator`` si X est numérique non binaire, par
+    la modalité « Manquant » si X est catégorielle. Restent utiles : ceux dont la source est
+    retirée (liste de E5) et ceux d'une source binaire (imputée sans indicateur).
+    """
+    dropped = set(drop)
+    out = []
+    for name, source in MISSING_PATTERNS.items():
+        if source in dropped or source in BINARY_COLUMNS:
+            continue
+        if source in CATEGORICAL_COLUMNS or add_indicator:
+            out.append(name)
+    return out
 
 
 def spline_contribution(pipeline: Pipeline, column: str, values: np.ndarray) -> pd.Series:

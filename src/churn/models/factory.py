@@ -34,6 +34,7 @@ from sklearn.tree import DecisionTreeClassifier
 from churn.config import get_config
 from churn.features.build import FeatureBuilder
 from churn.models.baselines import SegmentRateClassifier, make_dummy
+from churn.models.leakage import LeakNeutralizer
 from churn.models.pipelines import (
     MISSING_CATEGORY,
     load_logreg_drop_list,
@@ -47,11 +48,12 @@ TREE_MODELS = ("decision_tree", "random_forest", "lightgbm", "catboost")
 BASELINES = ("dummy", "rules")
 MODEL_NAMES: tuple[str, ...] = BASELINES + LINEAR_MODELS + TREE_MODELS
 
-# Hyperparamètres de départ (réglage en E8). Arbre et forêt : feuilles d'au moins 100 /
-# 50 clients pour limiter le surapprentissage sur un signal faible.
+# Hyperparamètres de départ, raisonnables sans réglage fin (E8). Arbre : profondeur 5 (lisible,
+# à but pédagogique) ; arbre et forêt : feuilles d'au moins 100 / 50 clients pour limiter le
+# surapprentissage sur un signal faible.
 DEFAULT_PARAMS: dict[str, dict[str, Any]] = {
-    "logreg": {"C": 0.01, "l1_ratio": 0.0},
-    "decision_tree": {"max_depth": 6, "min_samples_leaf": 100},
+    "logreg": {"C": 0.01, "l1_ratio": 0.0, "dedupe_missing": True},   # finaliste E8 (D69)
+    "decision_tree": {"max_depth": 5, "min_samples_leaf": 100},
     "random_forest": {"n_estimators": 300, "min_samples_leaf": 50, "max_features": "sqrt"},
     "lightgbm": {},
     "catboost": {"iterations": 500, "verbose": 0},
@@ -123,19 +125,23 @@ class CatBoostWithCategories(ClassifierMixin, BaseEstimator):
 
 
 def build_pipeline(model_name: str, groups: Sequence[str] | None = None,
-                   **params: Any) -> BaseEstimator:
+                   neutralize_leak: bool = False, **params: Any) -> BaseEstimator:
     """Construit un modèle non ajusté à partir de son nom.
 
     Args:
         model_name: un nom de ``MODEL_NAMES``.
         groups: familles de features (``None`` = celles de la config).
+        neutralize_leak: si vrai, les colonnes « déjà parti » (bloc d'usage, ``change_*``)
+            sont imputées par leur médiane en tête de pipeline (test de fuite D32, E8).
         **params: hyperparamètres du modèle, qui complètent ou remplacent ``DEFAULT_PARAMS``.
 
     Raises:
-        ValueError: nom de modèle inconnu.
+        ValueError: nom de modèle inconnu, ou neutralisation demandée pour une baseline.
     """
     if model_name not in MODEL_NAMES:
         raise ValueError(f"Modèle inconnu : {model_name} ; disponibles : {MODEL_NAMES}")
+    if neutralize_leak and model_name in BASELINES:
+        raise ValueError("La neutralisation ne s'applique qu'aux modèles appris sur les features.")
     cfg = get_config()
     seed = cfg.random_state
     groups = cfg.features.groups if groups is None else list(groups)
@@ -147,19 +153,22 @@ def build_pipeline(model_name: str, groups: Sequence[str] | None = None,
     if model_name == "rules":
         return SegmentRateClassifier()
     if model_name == "logreg_simple":
-        return make_logreg_pipeline(groups, load_logreg_drop_list())
-    if model_name == "logreg":
-        return make_improved_logreg_pipeline(groups, load_logreg_drop_list(), **merged)
-    if model_name == "decision_tree":
-        model = DecisionTreeClassifier(random_state=seed, **merged)
-        return Pipeline([("features", features), ("preprocess", tree_preprocessor()),
-                         ("model", model)])
-    if model_name == "random_forest":
+        pipeline = make_logreg_pipeline(groups, load_logreg_drop_list())
+    elif model_name == "logreg":
+        pipeline = make_improved_logreg_pipeline(groups, load_logreg_drop_list(), **merged)
+    elif model_name == "decision_tree":
+        pipeline = Pipeline([("features", features), ("preprocess", tree_preprocessor()),
+                             ("model", DecisionTreeClassifier(random_state=seed, **merged))])
+    elif model_name == "random_forest":
         model = RandomForestClassifier(random_state=seed, n_jobs=-1, **merged)
-        return Pipeline([("features", features), ("preprocess", tree_preprocessor()),
-                         ("model", model)])
-    if model_name == "lightgbm":
+        pipeline = Pipeline([("features", features), ("preprocess", tree_preprocessor()),
+                             ("model", model)])
+    elif model_name == "lightgbm":
         model = LGBMClassifier(random_state=seed, verbose=-1, n_jobs=-1, **merged)
-        return Pipeline([("features", features), ("model", model)])
-    model = CatBoostWithCategories(random_state=seed, **merged)
-    return Pipeline([("features", features), ("model", clone(model))])
+        pipeline = Pipeline([("features", features), ("model", model)])
+    else:
+        model = CatBoostWithCategories(random_state=seed, **merged)
+        pipeline = Pipeline([("features", features), ("model", clone(model))])
+    if neutralize_leak:
+        pipeline = Pipeline([("neutralize", LeakNeutralizer()), *pipeline.steps])
+    return pipeline

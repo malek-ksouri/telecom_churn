@@ -376,3 +376,168 @@ Un bilan par étape (E1 à E19), au format défini dans `CLAUDE.md`. Les chiffre
 - La cause exacte du dépassement de 90 minutes n'a pas été mesurée directement (seule la configuration L1, C = 1 l'a été).
 
 **Étape suivante** : E8 — Modèles avancés (arbre, forêt aléatoire, LightGBM, CatBoost) via `build_pipeline`, test de fuite D32 / D66, comparaison appariée avec la LR améliorée.
+
+## Bilan — Étape 8 : Modèles avancés et test de fuite
+
+**Fait** :
+- Comparaison de 7 modèles sur les folds figés de E6, via `build_pipeline` et `cross_validate_model` : Dummy, règles, LR améliorée, arbre de décision (profondeur 5), forêt aléatoire (300 arbres, feuilles ≥ 50), LightGBM, CatBoost (catégorielles natives)
+- `churn.models.leakage` : `LeakNeutralizer` (imputation par la médiane du fold, en tête de pipeline), masque des clients actifs, AUC par fold sur un sous-ensemble ; option `neutralize_leak` de `build_pipeline`
+- Test de fuite « déjà parti » sur les 2 meilleurs modèles, avec la règle de décision fixée avant les résultats
+- LR : option `dedupe_missing` (13 indicateurs en double retirés), devenue le réglage par défaut
+- `notebooks/05_modeling.ipynb`, 2e partie (sections 6 à 9) ; tests `tests/test_leakage.py` (5 tests)
+
+**Fichiers** :
+- Créés : `src/churn/models/leakage.py`, `tests/test_leakage.py`, `reports/figures/05_comparaison_modeles.png`
+- Modifiés : `src/churn/models/factory.py` (neutralisation, arbre à profondeur 5, LR sans doublons par défaut), `src/churn/models/preprocessing.py` (`dedupe_missing`, `duplicate_missing_indicators`), `src/churn/charts.py`, `notebooks/05_modeling.ipynb`, `docs/decisions.md`
+
+**Résultats clés** (5 folds, moyenne ± écart-type ; gain fold par fold sur la LR) :
+
+| Modèle | AUC | PR-AUC | lift@10 % | Precision@10 % | Brier | AUC train | Écart train-val. | s / fold | Gain sur la LR | Folds gagnés |
+|---|---|---|---|---|---|---|---|---|---|---|
+| Dummy | 0,503 ± 0,002 | 0,497 | 1,01 | 49,9 % | 0,497 | 0,499 | −0,003 | 0,0 | −165,1 | 0/5 |
+| Règles E4 | 0,617 ± 0,004 | 0,584 | 1,31 | 64,8 % | 0,239 | 0,617 | +0,001 | 8,1 | −50,8 | 0/5 |
+| LR améliorée | 0,668 ± 0,004 | 0,648 | 1,49 | 74,0 % | 0,229 | 0,671 | +0,004 | 2,7 | référence | – |
+| Arbre (profondeur 5) | 0,639 ± 0,002 | 0,612 | 1,44 | 71,2 % | 0,234 | 0,647 | +0,008 | 2,5 | −28,5 | 0/5 |
+| Forêt aléatoire | 0,678 ± 0,006 | 0,660 | 1,52 | 75,1 % | 0,227 | 0,786 | +0,107 | 9,1 | +10,4 | 5/5 |
+| **LightGBM** | **0,692 ± 0,004** | 0,677 | 1,57 | 77,9 % | 0,222 | 0,769 | +0,077 | **1,0** | **+24,1** | **5/5** |
+| **CatBoost** | **0,693 ± 0,004** | 0,677 | 1,58 | 78,1 % | 0,221 | 0,794 | +0,101 | 48,9 | **+25,2** | **5/5** |
+
+- CatBoost : 48,9 s par fold (maximum 50,3 s), sous la limite de 5 minutes ; itérations non réduites
+- Test de fuite : neutralisation −1,5 ± 0,2 millième (LightGBM), +1,0 ± 1,1 (CatBoost) ; sur les clients actifs, −0,6 et +1,6 ; AUC « clients actifs » 2,1 millièmes sous l'AUC globale
+- LR sans doublons : 0,6677 contre 0,6676 (écart +0,00 ± 0,04 millième), 189 colonnes au lieu de 202
+- Tests : 77 passed ; ruff : OK
+
+**Décisions et justification** : D67 à D71 dans `docs/decisions.md`.
+
+**À savoir défendre à l'oral** :
+- *Le modèle triche-t-il avec les clients déjà partis ?* Non. Quand on rend l'absence d'usage invisible (imputation par la médiane dans le pipeline), LightGBM ne perd que 1,5 millième d'AUC, moins que la variation entre folds. Le signal existe, mais le modèle n'en dépend pas ; sa performance tient aussi sur les 99,1 % de clients actifs.
+- *Pourquoi le boosting bat-il la forêt aléatoire ?* La forêt moyenne des arbres indépendants : elle réduit la variance mais corrige mal les erreurs. Le boosting construit chaque arbre pour corriger les erreurs des précédents : il extrait mieux un signal diffus fait de nombreux petits effets (E5).
+- *Pourquoi LightGBM plutôt que CatBoost, alors que CatBoost a la meilleure AUC ?* 1,2 millième d'écart, sous l'écart-type entre folds : ils sont indiscernables. LightGBM est 49 fois plus rapide et surapprend moins, ce qui compte pour le réglage en E9.
+
+**Limites / points ouverts** :
+- Surapprentissage des modèles d'arbres (écart train-validation de 0,08 à 0,11) avec leurs réglages par défaut : le réglage en E9 (profondeur, feuilles, taux d'apprentissage, régularisation) devra le réduire.
+- La 2e partie du notebook a été exécutée de façon autonome (avec sa propre préparation), puis ajoutée au notebook : c'est aussi le cas de la section « défauts corrigés » de la 1re partie.
+- Les clients à usage nul mais mesuré (`mou_Mean` = 0, 79 % de churn) ne sont pas concernés par la neutralisation : ils ont un usage mesuré, donc sont « actifs » au sens du test.
+- Brier sur l'échantillon équilibré : la calibration réelle sera traitée en E10.
+
+**Étape suivante** : E9 — Réglage des hyperparamètres des 2 finalistes (LightGBM, LR améliorée) en CV, puis évaluation finale unique sur le jeu de test.
+
+---
+
+# Bilan de partie — B : Modélisation (E5 à E8)
+
+## 1. Avancement par rapport au planning
+
+| Étape | Prévu | Réalisé | Statut |
+|---|---|---|---|
+| E5 Analyse statistique | Mar 29/09 | 28/09 | En avance |
+| E6 Feature engineering | Mar 29/09 | 28/09 | En avance |
+| E7 Pipeline + baselines | Mar 29/09 | 28/09 | En avance |
+| E8 Modèles avancés + test de fuite | Mar 29/09 | 28/09 | En avance |
+
+**Verdict : environ une journée d'avance.** Les parties A et B sont terminées le 28/09. La partie C (E9 à E13, prévue le 30/09) peut commencer le 29/09.
+
+Ce qui a coûté du temps, et qu'il faut anticiper en partie C :
+- les exécutions longues de notebooks (grille L1 de E7 : 15 à 25 minutes, une exécution interrompue au-delà de 90 minutes) ;
+- deux défauts de prétraitement découverts puis corrigés en E7.
+
+Pour la suite, les réglages d'hyperparamètres seront lancés en arrière-plan, avec un budget fixé à l'avance.
+
+## 2. Chiffres clés consolidés
+
+**E5 — Analyse statistique**
+- 118 tests, 93 significatifs après Holm, **116 effets négligeables**. Seuls `eqpdays` (r = 0,149) et `hnd_price` (r = −0,118) atteignent « faible ».
+- `months` : rank-biserial de 0,05 (négligeable), mais 1re en information mutuelle et 28,7 points d'écart entre déciles (relation non monotone).
+- Redondance : 60 paires au-delà de |ρ| = 0,9, 17 groupes, **36 variables retirées pour la régression logistique** (VIF maximal ensuite : 6,7).
+
+**E6 — Feature engineering**
+- Pas de second pic de churn à 23-24 mois : seul le flag `in_contract_end` est gardé.
+- `cycle_engagement` : **+28,2 millièmes pour la régression logistique** (5/5 folds), rien pour LightGBM.
+- 5 familles retenues (28 features). `deja_parti` exclue par défaut.
+
+**E7 — Prétraitement et baselines**
+- Régression logistique améliorée : **0,668** (log et winsorisation +8,5, splines +3,6 millièmes).
+- Grille de C plate : L2 avec C = 0,01 retenu par la règle de l'écart-type.
+- Deux défauts corrigés (indicateurs rares effacés par la winsorisation, binaires standardisés) : AUC inchangée, mais 8 colonnes rendues et un ajustement L1 2,5 fois plus rapide.
+
+**E8 — Modèles avancés** : voir le tableau ci-dessous et le test de fuite.
+
+## 3. Tableau comparatif final (5 folds figés, validation croisée sur le train)
+
+| Modèle | AUC | PR-AUC | lift@10 % | Precision@10 % | Brier | Écart train-validation | Temps par fold | Gain sur la LR (millièmes) | Folds gagnés |
+|---|---|---|---|---|---|---|---|---|---|
+| Dummy | 0,503 ± 0,002 | 0,497 | 1,01 | 49,9 % | 0,497 | −0,003 | 0 s | −165,1 | 0/5 |
+| Règles E4 | 0,617 ± 0,004 | 0,584 | 1,31 | 64,8 % | 0,239 | +0,001 | 8 s | −50,8 | 0/5 |
+| LR simple (E6) | 0,654 ± 0,004 | 0,626 | 1,40 | 69,4 % | 0,232 | +0,005 | – | −13,5 | 0/5 |
+| Arbre de décision (profondeur 5) | 0,639 ± 0,002 | 0,612 | 1,44 | 71,2 % | 0,234 | +0,008 | 2,5 s | −28,5 | 0/5 |
+| **LR améliorée** | **0,668 ± 0,004** | 0,648 | 1,49 | 74,0 % | 0,229 | **+0,004** | 2,7 s | référence | – |
+| Forêt aléatoire | 0,678 ± 0,006 | 0,660 | 1,52 | 75,1 % | 0,227 | +0,107 | 9,1 s | +10,4 | 5/5 |
+| **LightGBM** | **0,692 ± 0,004** | 0,677 | 1,57 | 77,9 % | 0,222 | +0,077 | **1,0 s** | **+24,1** | 5/5 |
+| CatBoost | 0,693 ± 0,004 | 0,677 | 1,58 | 78,1 % | 0,221 | +0,101 | 48,9 s | +25,2 | 5/5 |
+
+**Lecture** :
+- L'écart-type entre folds est d'environ 4 millièmes : deux modèles séparés de moins de 4 millièmes sont indiscernables (CatBoost et LightGBM).
+- La hiérarchie est nette et stable sur les 5 folds : règles < régression logistique < forêt < boosting.
+- Le lift@10 % est borné par 2 sur cet échantillon équilibré. Le Brier est calculé avant la correction vers le taux réel (E10).
+
+## 4. Test de fuite « client déjà parti » (D32, D57, D66, D67)
+
+| Modèle | AUC complet (tous / actifs) | AUC neutralisé (tous / actifs) | Perte (tous clients) | Écart-type entre folds |
+|---|---|---|---|---|
+| LightGBM | 0,6917 / 0,6896 | 0,6902 / 0,6891 | **+1,5 ± 0,2 millième** | 4,3 |
+| CatBoost | 0,6929 / 0,6908 | 0,6938 / 0,6924 | −1,0 ± 1,1 millième | 3,8 |
+
+- **Neutralisation** : le bloc d'usage et les `change_*` sont imputés par la médiane du fold, en tête de pipeline. Aucune absence n'est alors observable, ni par un indicateur, ni par un NaN, ni par un ratio.
+- **Règle fixée avant les résultats** : si la perte est inférieure à l'écart-type entre folds, on garde la version complète. C'est le cas pour les deux modèles, **la version complète est conservée**.
+- **Interprétation** : le signal existe (69 à 76 % de churn chez ces clients), mais il pèse au plus 1,5 millième d'AUC. Le modèle n'en dépend pas, et sa performance tient sur les 99,1 % de clients actifs.
+
+## 5. Finalistes pour E9 et pourquoi
+
+**LightGBM et la régression logistique améliorée (sans doublons).** Le gagnant sera choisi en E9.
+
+- **LightGBM** : la meilleure AUC, à égalité avec CatBoost. Il est **49 fois plus rapide** que CatBoost et surapprend moins (+0,077 contre +0,101), ce qui permet d'explorer plus de configurations au réglage.
+- **Régression logistique améliorée** : 25 millièmes d'AUC en moins, mais **aucun surapprentissage** (+0,004), des coefficients **lisibles** et tous cohérents avec l'EDA, et une maintenance simple.
+- **Le choix à trancher en E9** : ce que coûtent 25 millièmes d'AUC en clients ciblés à tort, contre la valeur d'une explication directe.
+- **Écartés** : la forêt (dominée par le boosting, sans gain de lisibilité), l'arbre de décision (trop faible), et CatBoost (gardé dans le code comme alternative).
+
+## 6. Décisions prises (D47 à D71)
+
+| Thème | Décisions | En une phrase |
+|---|---|---|
+| Hypothèse métier | D47 | Fenêtre de la cible d'environ 1 mois : taux réel mensuel de 2 % (sensibilité 1-2-3 %) ; le classement ne dépend pas de ce taux |
+| Statistiques | D48-D53 | Holm, Fisher pour les petits effectifs, information mutuelle pour les relations non monotones, 36 variables retirées pour la régression logistique |
+| Features | D54-D58 | Transformer sans état, 5 familles retenues, `deja_parti` isolée, folds figés |
+| Prétraitement | D59-D63 | Tout ce qui est appris est dans le pipeline, règle de l'écart-type pour C, deux défauts corrigés et mesurés |
+| Modèles | D64-D66, D68-D71 | `build_pipeline` pour 8 modèles, finalistes LightGBM et régression logistique, test de fuite réussi (D67) |
+
+## 7. Risques pour E9
+
+| Risque | Impact | Parade |
+|---|---|---|
+| **Surapprentissage du boosting** (écart train-validation de 0,077) | Gain de CV fragile | Régler la profondeur, les feuilles, le taux d'apprentissage et la régularisation ; suivre l'écart train-validation, pas seulement l'AUC |
+| **Optimisme du réglage** : les hyperparamètres sont choisis sur les mêmes folds que ceux qui servent à les évaluer | AUC de CV légèrement surestimée | Budget d'essais limité et fixé à l'avance ; jugement final sur le test |
+| **Le test n'est lu qu'une fois** | Pas de seconde chance | Écrire le protocole **avant** `load_test(final_evaluation=True)` : modèles réajustés sur tout le train, règle de choix du gagnant fixée à l'avance, les deux finalistes évalués ensemble une seule fois |
+| **Bruit du test** (20 000 clients, erreur-type de l'AUC ≈ 0,004) | Un écart de moins de 5 millièmes sur le test n'est pas interprétable | Intervalle de confiance par bootstrap sur le test ; comparaison appariée des deux finalistes |
+| **Seuils issus de l'EDA** (11-12 mois, 300 jours) | CV légèrement optimiste pour `cycle_engagement` | Le test, jamais lu, donne la mesure impartiale |
+| **Calibration** : les probabilités sont celles d'un échantillon équilibré | Chiffres métier faux sans correction | E10 : calibration dans une CV, puis correction vers le taux réel (D47) |
+| **Durée des exécutions** | Débordement de la partie C | Réglage en arrière-plan, nombre d'essais fixé (Optuna, environ 30 essais pour LightGBM) |
+
+## 8. Questions d'oral probables
+
+1. **Comment prouvez-vous que votre modèle ne triche pas ?**
+   Trois garde-fous :
+   - tout ce qui apprend des données (imputation, écrêtage, encodage, taux des segments) est dans le pipeline et ajusté dans chaque fold ;
+   - le jeu de test est verrouillé par le code jusqu'à l'évaluation finale ;
+   - le soupçon de fuite « client déjà parti » a été testé en rendant l'absence d'usage invisible : LightGBM ne perd que 1,5 millième d'AUC, moins que la variation entre folds.
+
+2. **Une AUC de 0,69, est-ce bon ?**
+   L'AUC est la probabilité qu'un churner tiré au hasard soit mieux classé qu'un non-churner : 0,69 contre 0,50 pour le hasard. Sur ce jeu, c'est un bon résultat : chaque variable a un lien faible avec le churn (corrélation maximale de 0,13), et une règle métier bien construite plafonne à 0,617. En pratique, parmi les 10 % de clients les mieux classés, 78 % sont des churners, contre 50 % en moyenne dans l'échantillon (lift de 1,57).
+
+3. **Pourquoi garder une régression logistique qui fait 25 millièmes de moins ?**
+   Parce qu'elle ne surapprend pas (écart train-validation de 0,004 contre 0,077), que chaque coefficient se relie à un constat de l'EDA (fin d'engagement, terminal ancien, baisse d'usage), et qu'elle est simple à expliquer à un métier. Le choix final se fera en E9, en mesurant ce que les 25 millièmes représentent en clients ciblés.
+
+4. **Pourquoi le feature engineering aide-t-il la régression logistique mais pas LightGBM ?**
+   Un modèle linéaire ne peut pas représenter un pic : sans l'indicateur `in_contract_end`, il ne voit pas l'effet 11-12 mois, d'où +28 millièmes. Un arbre découpe lui-même les variables aux bons seuils et gère les NaN : les features ne lui apprennent rien de nouveau (+1,8 millième, dans le bruit).
+
+5. **Comment une variable peut-elle être importante avec une corrélation quasi nulle ?**
+   La corrélation, même de rang, mesure une tendance monotone. `months` a un pic de churn à 11-12 mois : les deux côtés du pic se compensent, et la corrélation vaut 0,05. L'écart entre déciles (28,7 points) et l'information mutuelle, qui n'est nulle qu'en cas d'indépendance, révèlent cet effet.

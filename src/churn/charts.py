@@ -493,3 +493,26 @@ def spline_effect_chart(effects: dict[str, pd.Series], title: str,
     fig.update_annotations(font_size=11, font_color=INK_SECONDARY)
     fig.update_layout(title=title, height=440)
     return fig
+
+
+def model_comparison_chart(table: pd.DataFrame, title: str, reference: str | None = None,
+                           value: str = "auc", error: str = "auc_std") -> go.Figure:
+    """AUC moyenne ± écart-type par modèle (points triés), avec le modèle de référence tracé."""
+    t = table.sort_values(value)
+    fig = go.Figure(go.Scatter(
+        x=t[value], y=list(t.index), mode="markers+text", marker={"size": 10, "color": ACCENT},
+        error_x={"type": "data", "array": t[error], "color": INK_SECONDARY, "thickness": 1.5,
+                 "width": 4},
+        text=[f"{v:.3f}" for v in t[value]], textposition="top center",
+        textfont={"size": 10, "color": INK_SECONDARY},
+        hovertemplate="%{y}<br>AUC %{x:.4f}<extra></extra>",
+    ))
+    if reference is not None:
+        fig.add_vline(x=float(table.loc[reference, value]), line_dash="dash",
+                      line_color=INK_SECONDARY, line_width=1,
+                      annotation_text=reference, annotation_position="top",
+                      annotation_font_color=INK_SECONDARY)
+    fig.update_layout(title=title, xaxis_title="ROC-AUC en validation (5 folds, ± écart-type)",
+                      height=52 * len(t) + 180)
+    fig.update_yaxes(type="category")
+    return fig
