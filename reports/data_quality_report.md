@@ -10,7 +10,7 @@ Cible : churn = 1 pour 49.56% des clients. Décisions détaillées : `docs/decis
 | Valeurs négatives impossibles | eqpdays (133), totmrc_Mean (23), rev_Mean (5), avg6rev (3) | NaN + indicateur `_was_negative` dans clean() | D19 |
 | Code « inconnu » différent selon la colonne | U : new_cell, dualband, marital, kid* ; UNKW : hnd_webcap | → modalité `Unknown` ; prizm_social_one U = Urban conservé | D20 |
 | NaN (donnée non collectée) | 18 motifs, 22 à 49 % sur le socio externe | Conservés ; imputés dans le pipeline | D21 |
-| Manquant lié au churn | 15/16 motifs significatifs (Holm), V ≤ 0.065 | Indicateur par motif en E6 | D22 |
+| Manquant lié au churn | 16/16 motifs significatifs (Holm), V ≤ 0.063 | Indicateur par motif en E6 | D22 |
 | Colonnes > 40 % de NaN | numbcars (49,4 %) | Pas de suppression a priori ; tranché en CV (E6) | D23 |
 | Clients sans usage | 357 lignes | Conservés ; possible fuite « déjà parti » (avec change_* manquants), test avec / sans en E8 | D24, D32 |
 | avg6* manquant | 2839 clients, dont 92.5% à 6-8 mois | Surtout structurel (clients récents) ; indicateur | D25 |
@@ -60,26 +60,26 @@ Après `clean()` : **0 échec** du schéma `clean`.
 
 ![Co-occurrence des manquants](figures/01_missing_cooccurrence.png)
 
-## 3. « Est manquant » × churn (χ², Holm, V de Cramér)
+## 3. « Est manquant » × churn (χ², Holm, V de Cramér) — train uniquement (80000 lignes, D18)
 
 | groupe | n_colonnes | pct_manquant | churn_si_manquant | churn_si_present | ecart_pts | cramers_v | p_holm | significatif |
 |---|---|---|---|---|---|---|---|---|
-| hnd_webcap | 1 | 10.19 | 59.2 | 48.5 | 10.7 | 0.0646 | 1.4e-91 | True |
-| change_mou | 2 | 0.89 | 76.1 | 49.3 | 26.8 | 0.0503 | 7.9e-56 | True |
-| avg6mou | 3 | 2.84 | 40.2 | 49.8 | -9.6 | 0.0319 | 8.2e-23 | True |
-| infobase | 1 | 22.08 | 52 | 48.9 | 3.1 | 0.0258 | 4.9e-15 | True |
-| hnd_price | 1 | 0.85 | 36.7 | 49.7 | -13 | 0.0237 | 7.2e-13 | True |
-| adults | 1 | 23.02 | 51.7 | 48.9 | 2.8 | 0.0236 | 8.8e-13 | True |
-| lor | 1 | 30.19 | 51.4 | 48.8 | 2.6 | 0.0236 | 8.8e-13 | True |
-| dwllsize | 1 | 38.31 | 51 | 48.6 | 2.4 | 0.0232 | 2.0e-12 | True |
-| rev_Mean | 9 | 0.36 | 68.6 | 49.5 | 19.1 | 0.0228 | 4.2e-12 | True |
-| HHstatin | 1 | 37.92 | 51 | 48.7 | 2.3 | 0.0223 | 1.3e-11 | True |
-| income | 1 | 25.44 | 51.4 | 48.9 | 2.5 | 0.0219 | 2.4e-11 | True |
-| dwlltype | 1 | 31.91 | 51.2 | 48.8 | 2.4 | 0.0219 | 2.4e-11 | True |
-| ownrent | 1 | 33.71 | 51 | 48.8 | 2.2 | 0.0209 | 1.6e-10 | True |
-| numbcars | 1 | 49.37 | 50.2 | 48.9 | 1.3 | 0.0133 | 8.4e-05 | True |
-| prizm_social_one | 1 | 7.39 | 51.6 | 49.4 | 2.2 | 0.0113 | 6.7e-04 | True |
-| truck | 10 | 1.73 | 47.9 | 49.6 | -1.7 | 0.0045 | 1.5e-01 | False |
+| hnd_webcap | 1 | 10.2 | 58.9 | 48.5 | 10.4 | 0.0632 | 2.9e-70 | True |
+| change_mou | 2 | 0.9 | 76 | 49.3 | 26.7 | 0.0504 | 6.1e-45 | True |
+| avg6mou | 3 | 2.84 | 40 | 49.8 | -9.8 | 0.0325 | 4.9e-19 | True |
+| infobase | 1 | 22.12 | 52 | 48.9 | 3.2 | 0.0264 | 1.0e-12 | True |
+| adults | 1 | 23.06 | 51.8 | 48.9 | 2.9 | 0.0243 | 7.7e-11 | True |
+| lor | 1 | 30.21 | 51.4 | 48.8 | 2.6 | 0.0242 | 8.2e-11 | True |
+| HHstatin | 1 | 37.99 | 51.1 | 48.6 | 2.4 | 0.0237 | 1.9e-10 | True |
+| rev_Mean | 9 | 0.37 | 68.9 | 49.5 | 19.5 | 0.0235 | 2.7e-10 | True |
+| dwllsize | 1 | 38.35 | 51 | 48.6 | 2.4 | 0.0232 | 4.2e-10 | True |
+| income | 1 | 25.46 | 51.5 | 48.9 | 2.6 | 0.023 | 5.0e-10 | True |
+| dwlltype | 1 | 31.94 | 51.2 | 48.8 | 2.4 | 0.0226 | 1.0e-09 | True |
+| hnd_price | 1 | 0.87 | 37.6 | 49.7 | -12 | 0.0223 | 1.3e-09 | True |
+| ownrent | 1 | 33.75 | 51.1 | 48.8 | 2.3 | 0.0215 | 4.6e-09 | True |
+| numbcars | 1 | 49.39 | 50.2 | 48.9 | 1.3 | 0.0129 | 8.0e-04 | True |
+| prizm_social_one | 1 | 7.37 | 51.6 | 49.4 | 2.2 | 0.0117 | 2.0e-03 | True |
+| truck | 10 | 1.76 | 46.8 | 49.6 | -2.8 | 0.0073 | 3.9e-02 | True |
 
 Toutes les tailles d'effet sont faibles (V < 0,1) : ces motifs justifient des indicateurs, pas des conclusions causales.
 

@@ -7,6 +7,7 @@ import os
 
 LOG_FORMAT = "%(asctime)s | %(levelname)-7s | %(name)s | %(message)s"
 DATE_FORMAT = "%H:%M:%S"
+NOISY_LOGGERS = ("kaleido", "choreographer", "urllib3", "matplotlib")
 
 
 def setup_logging(level: int | str | None = None) -> None:
@@ -21,3 +22,6 @@ def setup_logging(level: int | str | None = None) -> None:
     """
     resolved = level or os.environ.get("LOG_LEVEL", "INFO")
     logging.basicConfig(level=resolved, format=LOG_FORMAT, datefmt=DATE_FORMAT, force=True)
+    # Bibliothèques tierces très bavardes au niveau INFO (export PNG de Plotly via Chrome).
+    for name in NOISY_LOGGERS:
+        logging.getLogger(name).setLevel(logging.WARNING)
