@@ -49,6 +49,12 @@ class ModelingConfig(BaseModel):
     cv_folds: int = Field(ge=2)
 
 
+class FeaturesConfig(BaseModel):
+    """Familles de features actives (validées par ``FeatureBuilder``)."""
+
+    groups: list[str]
+
+
 class Hypothesis(BaseModel):
     """Valeur métier qui n'est pas issue des données et doit être présentée comme telle."""
 
@@ -75,6 +81,7 @@ class Config(BaseModel):
     paths: PathsConfig
     data: DataConfig
     modeling: ModelingConfig
+    features: FeaturesConfig
     business: BusinessConfig
 
     @property

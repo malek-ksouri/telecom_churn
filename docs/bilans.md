@@ -295,3 +295,38 @@ Un bilan par étape (E1 à E19), au format défini dans `CLAUDE.md`. Les chiffre
 - Le VIF ne porte que sur les numériques ; les catégorielles encodées et les indicateurs seront contrôlés dans le pipeline en E7.
 
 **Étape suivante** : E6 — Feature engineering (indicateurs de fin d'engagement, indicateurs de manquants par motif, transformations log, sur la base de `top15_importance.csv`).
+
+## Bilan — Étape 6 : Feature engineering
+
+**Fait** :
+- `churn.features.build.FeatureBuilder` : transformer sans état, 8 familles activables (dont `deja_parti` isolée pour le test de fuite), divisions sécurisées
+- `churn.models.pipelines` (LightGBM par défaut ; régression logistique avec imputation, standardisation, one-hot et liste de retrait de E5) et `churn.evaluation.cv` (folds figés, AUC par fold, ablation, gain apparié)
+- `notebooks/04_feature_engineering.ipynb` : justification de chaque feature, vérification du pic à 23-24 mois, taux de churn par classe, ablation 5 folds × 2 modèles, décision par famille
+- Familles retenues inscrites dans `configs/config.yaml` ; tests `tests/test_features.py` (16 tests)
+
+**Fichiers** :
+- Créés : `src/churn/features/build.py`, `src/churn/models/pipelines.py`, `src/churn/evaluation/cv.py`, `notebooks/04_feature_engineering.ipynb`, `tests/test_features.py`, `reports/ablation_features.csv`, `reports/figures/04_*.png` (5)
+- Modifiés : `configs/config.yaml`, `src/churn/config.py` (section `features`), `src/churn/charts.py`, `docs/decisions.md`
+
+**Résultats clés** :
+- Pas de second pic : 23-24 mois 51,7 %, 35-36 mois 48,4 % (contre 51,3 %) → seul le flag `in_contract_end` est gardé
+- `in_contract_end` : 14,1 % des clients, 63,5 % de churn (47,3 % sinon) ; `handset_old` : 56,3 % contre 39,4 % ; `eqpdays_per_tenure_day` : information mutuelle 0,017
+- Références (5 folds) : LightGBM **0,690 ± 0,005**, régression logistique **0,623 ± 0,004**
+- Ablation, régression logistique : `cycle_engagement` **+28,2 ± 2,7 millièmes (5/5 folds)** ; autres familles de −0,1 à +2,9 ; toutes : +34,9
+- Ablation, LightGBM : aucune famille au-delà de l'écart-type (max +1,3) ; `deja_parti` : **0,0 exactement**
+- Configuration retenue (5 familles, 28 features) : régression logistique **0,654 ± 0,004** (+31,6), LightGBM **0,692 ± 0,004** (+1,8)
+- Tests : 16 nouveaux (transformer sans état, pas d'inf, colonnes selon les familles) ; ruff : OK
+
+**Décisions et justification** : D54 à D58 dans `docs/decisions.md`.
+
+**À savoir défendre à l'oral** :
+- *Pourquoi le feature engineering n'améliore-t-il pas LightGBM ?* Un arbre découpe lui-même les variables aux bons seuils (11-12 mois, 300 jours) et gère les NaN ; il n'a pas besoin qu'on les lui donne. Une régression logistique, elle, est linéaire : sans l'indicateur `in_contract_end`, elle ne peut pas représenter un pic, d'où +28 millièmes d'AUC.
+- *Pourquoi garder des familles qui ne dépassent pas l'écart-type ?* Règle explicite : gain positif dans les 5 folds pour au moins un modèle **et** utilité métier (raison lisible pour expliquer un score, levier d'action). Les familles sans les deux ont été retirées.
+- *Le transformer ne fuit-il pas ?* Il n'apprend rien (test : `fit` ne change aucun attribut). En revanche, les seuils 11-12 mois et 300 jours ont été choisis en EDA sur le train entier : la CV est légèrement optimiste pour `cycle_engagement` ; le test final, jamais lu, tranchera.
+
+**Limites / points ouverts** :
+- Test de fuite D32 (E8) : pour LightGBM, il faudra neutraliser les NaN d'origine de `rev_Mean` et `change_mou`, pas seulement désactiver `deja_parti`.
+- La régression logistique reste loin de LightGBM (0,654 contre 0,692) : préprocessing simple (pas de `log1p`), à améliorer en E7.
+- Écart-type de l'AUC entre folds d'environ 0,004-0,005 : des écarts de moins de 5 millièmes entre modèles ne seront pas interprétables sans comparaison appariée.
+
+**Étape suivante** : E7 — Pipeline + baselines (Dummy, régression logistique, arbre, forêt aléatoire), comparés sur les mêmes folds et au benchmark par règles (AUC 0,617).

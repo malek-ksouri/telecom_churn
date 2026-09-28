@@ -30,6 +30,17 @@ data:
 modeling:
   cv_folds: 5
 
+features:
+  # Familles de features ajoutées par churn.features.build.FeatureBuilder, retenues en E6
+  # (ablation, D55-D56). Écartées : qualite_reseau, service_client (effet nul).
+  # deja_parti : hors configuration par défaut, réservée au test de fuite D32 (E8).
+  groups:
+    - cycle_engagement
+    - tendance_usage
+    - forfait
+    - compte_terminal
+    - indicateurs_manquants
+
 business:
   # HYPOTHÈSE : taux de churn réel d'un opérateur, utilisé pour corriger le prior
   # (le dataset est échantillonné à ~50/50, ce qui gonfle les probabilités).

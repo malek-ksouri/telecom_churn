@@ -422,3 +422,34 @@ def dendrogram_chart(corr: pd.DataFrame, title: str, threshold: float = 0.9) -> 
                       xaxis_title="distance 1 - |ρ| (lien moyen)", showlegend=False)
     fig.update_yaxes(showgrid=False, tickfont={"size": 10})
     return fig
+
+
+def ablation_chart(summary: pd.DataFrame, reference: str, title: str,
+                   order: list[str] | None = None) -> go.Figure:
+    """Gain d'AUC par configuration et par modèle, barres d'erreur = écart-type du gain par fold.
+
+    Deux modèles : deux premières couleurs catégorielles, légende et étiquettes directes
+    (au-dessus du point pour le premier modèle, au-dessous pour le second).
+    """
+    colors = [NO_CHURN, CHURN]
+    positions = ["top center", "bottom center"]
+    t = summary[summary["configuration"] != reference]
+    order = [c for c in (order or list(dict.fromkeys(t["configuration"]))) if c != reference]
+    fig = go.Figure()
+    for i, (model, part) in enumerate(t.groupby("modele", sort=False)):
+        part = part.set_index("configuration").loc[order]
+        fig.add_trace(go.Scatter(
+            x=1000 * part["gain_moyen"], y=order, mode="markers+text", name=model,
+            marker={"size": 10, "color": colors[i % 2]},
+            error_x={"type": "data", "array": 1000 * part["gain_ecart_type"],
+                     "color": colors[i % 2], "thickness": 1.5, "width": 4},
+            text=[f"{1000 * g:+.1f}" for g in part["gain_moyen"]],
+            textposition=positions[i % 2],
+            textfont={"size": 10, "color": INK_SECONDARY},
+            hovertemplate="%{y}<br>gain %{x:+.1f} millièmes d'AUC<extra>" + model + "</extra>",
+        ))
+    fig.add_vline(x=0, line_color=INK_SECONDARY, line_width=1)
+    fig.update_layout(title=title, height=58 * len(order) + 200,
+                      xaxis_title="gain d'AUC par rapport à la référence (millièmes)")
+    fig.update_yaxes(type="category", autorange="reversed")
+    return fig
