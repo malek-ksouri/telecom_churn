@@ -46,6 +46,17 @@ def adjust_prior(p: np.ndarray, real_rate: float, sample_rate: float = 0.5) -> n
     return num / (num + (1 - p) * ((1 - real_rate) / (1 - sample_rate)))
 
 
+def population_weights(y: np.ndarray, real_rate: float, sample_rate: float) -> np.ndarray:
+    """Poids qui transforment l'échantillon équilibré en portefeuille au taux réel.
+
+    Churners : r/s ; non-churners : (1 - r)/(1 - s). La moyenne pondérée de ``y`` vaut
+    alors exactement ``real_rate`` ; on suppose que les churners (et les non-churners) de
+    l'échantillon sont représentatifs de leur classe.
+    """
+    y = np.asarray(y)
+    return np.where(y == 1, real_rate / sample_rate, (1 - real_rate) / (1 - sample_rate))
+
+
 def reliability_table(y: np.ndarray, p: np.ndarray, n_bins: int = 10) -> pd.DataFrame:
     """Courbe de fiabilité : par classe de probabilité prédite (quantiles), probabilité
     moyenne prédite et taux de churn observé."""
@@ -87,7 +98,7 @@ def production_precision_at_k(y: np.ndarray, score: np.ndarray, real_rate: float
     """
     y = np.asarray(y)
     order = np.argsort(-np.asarray(score), kind="stable")
-    w = np.where(y == 1, real_rate / sample_rate, (1 - real_rate) / (1 - sample_rate))[order]
+    w = population_weights(y, real_rate, sample_rate)[order]
     cum_w = np.cumsum(w)
     top = cum_w <= k * w.sum()
     return float((w[top] * y[order][top]).sum() / w[top].sum())
@@ -97,7 +108,7 @@ def weighted_mean(values: np.ndarray, y: np.ndarray, real_rate: float,
                   sample_rate: float, mask: np.ndarray | None = None) -> float:
     """Moyenne de ``values`` sur la population repondérée au taux réel (éventuellement filtrée)."""
     y = np.asarray(y)
-    w = np.where(y == 1, real_rate / sample_rate, (1 - real_rate) / (1 - sample_rate))
+    w = population_weights(y, real_rate, sample_rate)
     if mask is not None:
         values, w = np.asarray(values)[mask], w[mask]
     return float(np.average(values, weights=w))
@@ -108,7 +119,7 @@ def top_k_mask_weighted(y: np.ndarray, score: np.ndarray, real_rate: float,
     """Masque des clients qui forment les k % les plus risqués de la population repondérée."""
     y = np.asarray(y)
     order = np.argsort(-np.asarray(score), kind="stable")
-    w = np.where(y == 1, real_rate / sample_rate, (1 - real_rate) / (1 - sample_rate))[order]
+    w = population_weights(y, real_rate, sample_rate)[order]
     mask = np.zeros(len(y), dtype=bool)
     mask[order[np.cumsum(w) <= k * w.sum()]] = True
     return mask

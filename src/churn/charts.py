@@ -694,3 +694,56 @@ def waterfall_chart(contributions: pd.Series, base_value: float, title: str,
                       xaxis_title="log-odds (échelle du modèle brut)")
     fig.update_yaxes(autorange="reversed", type="category")
     return fig
+
+
+TIER_COLORS = {"High": "#c8412f", "Medium": "#eb8a5e", "Low": "#c9c7c1", "Inactif": "#52514e"}
+
+
+def tier_lift_chart(bands: pd.DataFrame, min_lift: float, title: str) -> go.Figure:
+    """Lift par bande de score (barres colorées par niveau) et lift cumulé (ligne).
+
+    Les deux séries partagent la même unité (lift) : un seul axe. Seuil de lift en pointillés.
+    """
+    x = [f"{a:.0f}-{b:.0f} %" for a, b in zip(bands["debut_pct"], bands["fin_pct"], strict=True)]
+    fig = go.Figure()
+    for tier in ["High", "Medium", "Low"]:
+        m = (bands["niveau"] == tier).to_numpy()
+        if not m.any():
+            continue
+        fig.add_trace(go.Bar(
+            x=[v for v, keep in zip(x, m, strict=True) if keep], y=bands.loc[m, "lift"],
+            name=f"{tier} (lift de la bande)", marker_color=TIER_COLORS[tier],
+            marker_line={"color": SURFACE, "width": 2},
+            hovertemplate="bande %{x}<br>lift %{y:.2f}<extra>" + tier + "</extra>"))
+    fig.add_trace(go.Scatter(x=x, y=bands["lift_cumule"], mode="lines+markers",
+                             name="lift cumulé", line={"color": ACCENT, "width": 2},
+                             marker={"size": 8},
+                             hovertemplate="jusqu'à %{x}<br>lift cumulé %{y:.2f}<extra></extra>"))
+    fig.add_hline(y=min_lift, line_dash="dash", line_color=INK_SECONDARY, line_width=1,
+                  annotation_text=f"seuil Medium : lift {min_lift:.1f}".replace(".", ","),
+                  annotation_position="top right")
+    fig.add_hline(y=1, line_color=GRID, line_width=1)
+    fig.update_layout(title=title, height=480, bargap=0.15,
+                      xaxis_title="bande de score (part du portefeuille, du plus risqué au moins "
+                                  "risqué)",
+                      yaxis_title="lift (taux de churn de la bande / taux moyen)")
+    fig.update_xaxes(type="category", tickangle=-45)
+    return fig
+
+
+def grouped_bar_chart(table: pd.DataFrame, title: str, y_title: str, fmt: str = ".0f",
+                      colors: dict[str, str] | None = None) -> go.Figure:
+    """Barres groupées : une série par colonne de ``table``, catégories en index."""
+    fig = go.Figure()
+    palette = [NO_CHURN, CHURN, "#1baf7a", "#8a5cd1"]
+    for i, col in enumerate(table.columns):
+        color = (colors or {}).get(col, palette[i % len(palette)])
+        fig.add_trace(go.Bar(x=[str(v) for v in table.index], y=table[col], name=str(col),
+                             marker_color=color, marker_line={"color": SURFACE, "width": 2},
+                             text=[f"{v:{fmt}}" for v in table[col]], textposition="outside",
+                             cliponaxis=False,
+                             hovertemplate="%{x}<br>" + str(col) + " : %{y:" + fmt + "}"
+                                           "<extra></extra>"))
+    fig.update_layout(title=title, yaxis_title=y_title, height=480, barmode="group")
+    fig.update_xaxes(type="category")
+    return fig

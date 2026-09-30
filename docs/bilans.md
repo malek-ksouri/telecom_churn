@@ -673,3 +673,87 @@ Pour la suite, les réglages d'hyperparamètres seront lancés en arrière-plan,
 - Variables corrélées (`hnd_price`, `eqpdays`, `phones`) : l'importance se partage entre elles, leur rang individuel est à lire avec prudence.
 
 **Étape suivante** : E12 — Scoring métier et artefacts (niveaux de risque selon la capacité de campagne, actions suggérées, `artifacts/scores.parquet`, `shap.parquet`, `kpis.json`), avec un taux de succès de l'offre présenté comme hypothèse (D79).
+
+## Bilan — Étape 12 : Risk scoring et artefacts
+
+**Fait** :
+- Scores sans fuite pour les 100 000 clients :
+  - train : **hors fold**, avec les mêmes 5 folds et un modèle final réentraîné et recalibré dans chaque fold ;
+  - test : **modèle final livré**.
+- `churn.business.scoring` :
+  - catégorie Inactif (D86) ;
+  - lift par bande sur le portefeuille repondéré au taux réel ;
+  - seuils High / Medium / Low (capacité 10 %, lift de bande > 1,2) ;
+  - graphique justificatif.
+- `churn.business.actions` : familles actionnables / contexte (D83-D85), 3 raisons actionnables, contexte, action selon le facteur dominant.
+- `churn.business.campaign` :
+  - revenu en jeu = probabilité corrigée × `rev_Mean` ;
+  - tableau de campagne (5, 10, 20 %), avec les inactifs sur une ligne à part ;
+  - synthèses par niveau, segment et action.
+- `scripts/build_artifacts.py` (`make artifacts`, 3 minutes) :
+  - `artifacts/scores.parquet` (100 000 × 34) ;
+  - `artifacts/shap.parquet` (800 000 lignes, 8 facteurs par client) ;
+  - `artifacts/kpis.json`.
+- `notebooks/08_business_analysis.ipynb` : réponses chiffrées aux questions métier, illustrations sous hypothèse de taux de succès, sensibilité 1-3 %.
+- `tests/test_business.py` : 6 tests.
+
+**Fichiers** :
+- Créés : `src/churn/business/{scoring,actions,campaign}.py`, `scripts/build_artifacts.py`, `notebooks/08_business_analysis.ipynb`, `tests/test_business.py`, `artifacts/{scores.parquet,shap.parquet,kpis.json}`, `reports/tier_bands.csv`, `reports/figures/08_{tiers_lift,actions,raisons_high,campagne}.png`
+- Modifiés :
+  - `configs/config.yaml` et `src/churn/config.py` : section `business.campaign` ;
+  - `src/churn/evaluation/calibration.py` : `population_weights` ;
+  - `src/churn/explain/shap_utils.py` : libellés ;
+  - `src/churn/charts.py` : `tier_lift_chart`, `grouped_bar_chart` ;
+  - `docs/decisions.md`.
+
+**Résultats clés** (portefeuille réel de 100 000 clients, taux réel **supposé** de 2 % par mois) :
+- **Contrôles** :
+  - AUC hors fold 0,6941 (CV E9 : 0,6942), AUC test 0,6955 ;
+  - churn observé par niveau identique sur le train et le test (High 72,3 % / 73,0 %, Medium 59,0 % / 58,6 %, Low 37,6 % / 37,3 %) ;
+  - 2 002 départs attendus au total pour 2 000 supposés.
+- **Seuils** : High si proba calibrée ≥ 0,6484, Medium si ≥ 0,5327. Lift des bandes : 3,11 et 2,13 (High), de 1,78 à 1,29 (Medium), puis 1,13 à 30-35 %.
+- **Niveaux** :
+
+  | Niveau | Clients | Part du portefeuille | Risque mensuel moyen | Part des départs attendus | Revenu en jeu |
+  |---|---|---|---|---|---|
+  | High | 9 876 | 9,9 % | 5,1 % | 25 % | 26 % |
+  | Medium | 19 836 | 19,8 % | 2,9 % | 29 % | 29 % |
+  | Low | 69 375 | 69,4 % | 1,2 % | 43 % | 45 % |
+  | Inactif | 913 | 0,9 % | 7,2 % | 3 % | 1 % |
+
+- **Campagne** :
+
+  | Capacité | Churners attendus | Au hasard | Facteur | Revenu en jeu |
+  |---|---|---|---|---|
+  | Top 5 % des actifs | 308 | 100 | 3,1 | 17 700 $ par mois |
+  | Top 10 % des actifs | 511 | 200 | 2,6 | 30 100 $ par mois |
+  | Top 20 % des actifs | 831 | 400 | 2,1 | 48 800 $ par mois |
+
+  - Au top 10 %, cela fait environ **51 futurs churners pour 1 000 clients contactés, contre 20 au hasard**. Les départs évités dépendent du taux de succès de l'offre, à mesurer.
+  - Contrôle : 515 churners observés (historique repondéré) contre 511 attendus.
+  - Revenu mensuel en jeu du portefeuille : **116 000 $**, soit 2,0 % de la facture mensuelle.
+- **Actions des clients High** (échantillon) : offre adaptée à l'usage 7 030, réengagement 5 639, renouvellement du terminal 3 374, changement de forfait 1 142, multi-lignes 251, geste réseau 36. Les inactifs (1 972 clients de l'échantillon) reçoivent « vérifier la ligne / reconquête ».
+- **Profil High** (médianes) : usage −45 minutes par mois, terminal de 377 jours à 60 $, 37 % en fin d'engagement (4 % chez les Low).
+- **Segments** :
+  - clients anciens à terminal ancien : risque le plus élevé (2,7 %, 16 % de High) ;
+  - gros consommateurs en baisse d'usage : 32 % du revenu en jeu pour 21 % du portefeuille ;
+  - lignes secondaires : 5,4 % d'inactifs.
+- **Sensibilité au taux réel** : le facteur par rapport au hasard est stable (2,58 / 2,56 / 2,53 à 1 %, 2 % et 3 %), les montants sont presque proportionnels au taux (revenu en jeu de 58 000 $ à 174 000 $ par mois).
+- **Tests** : 97 passed ; ruff : OK.
+
+**Décisions et justification** : D83 à D90 dans `docs/decisions.md`.
+
+**À savoir défendre à l'oral** :
+- **Pourquoi des scores hors fold pour le train ?** Un client ne doit jamais être noté par un modèle qui l'a vu, sinon son score est trop optimiste. L'AUC hors fold (0,694) retrouve celle de la CV, et celle du test celle de l'évaluation finale.
+- **Pourquoi repondérer ?** Le jeu contient 50 % de churners, un vrai portefeuille environ 2 %. Sans repondération, « les 10 % les plus risqués » seraient plus extrêmes que dans la réalité et les chiffres de campagne seraient gonflés.
+- **Pourquoi le lift de bande plutôt que le lift cumulé ?** Le lift cumulé à x % mélange les clients High du haut de la liste avec ceux situés à x % : il aurait classé Medium des clients moins risqués que la moyenne.
+- **Qu'est-ce que le revenu en jeu ?** Le revenu qu'on s'attend à perdre sans action (probabilité × facture). Ce n'est pas un gain : le gain dépend du taux de succès de l'offre, inconnu.
+
+**Limites / points ouverts** :
+- Le taux réel de 2 % est une hypothèse. Les montants y sont presque proportionnels ; les niveaux et le classement, non.
+- Les seuils sont des probabilités calibrées fixes. Sur un vrai portefeuille, la part de clients High sera proche de 10 % seulement si sa distribution de risque ressemble à celle du portefeuille repondéré : à surveiller en production.
+- La définition des inactifs est stricte (0 minute ou usage non mesuré). 673 clients High ont moins de 10 minutes par mois et sont probablement proches de « déjà partis ».
+- Les raisons et les actions sont des associations apprises (SHAP), pas des causes. Aucune action n'a été testée : il faut un groupe témoin pour mesurer le taux de succès.
+- Il n'y a pas de coût ni de budget, donc pas de capacité optimale : la capacité est un choix métier.
+
+**Étape suivante** : E13 — API FastAPI (routers fins sur `churn.services` : fiche client, liste filtrée par niveau et segment, KPI, tableau de campagne, scoring d'un nouveau client avec raisons et action).

@@ -78,3 +78,12 @@ business:
     # La cible couvre une fenêtre d'environ 1 mois (Cell2Cell : départ entre J+31 et J+60), D47.
     target_window: "environ 1 mois (départ entre J+31 et J+60)"
     sensitivity: [0.01, 0.02, 0.03]   # analyse de sensibilité en E10
+
+  # Campagne de rétention (E12) : paramètres métier, à ajuster avec l'équipe marketing.
+  # Les parts s'entendent sur le portefeuille réel (clients repondérés au taux réel supposé).
+  campaign:
+    capacity: 0.10                    # High = les 10 % du portefeuille au score le plus élevé
+    capacities: [0.05, 0.10, 0.20]    # capacités comparées dans le tableau de campagne
+    medium_min_lift: 1.2              # Medium = bandes suivantes tant que leur lift > 1,2
+    lift_band: 0.05                   # largeur des bandes de score (5 % du portefeuille)
+    portfolio_size: 100000            # taille de portefeuille pour exprimer les effectifs

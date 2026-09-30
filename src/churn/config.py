@@ -75,10 +75,21 @@ class Hypothesis(BaseModel):
     sensitivity: list[float] = Field(default_factory=list)
 
 
+class CampaignConfig(BaseModel):
+    """Paramètres de la campagne de rétention (E12) : choix métier, pas des données."""
+
+    capacity: float = Field(0.10, gt=0, lt=1)
+    capacities: list[float] = Field(default_factory=lambda: [0.05, 0.10, 0.20])
+    medium_min_lift: float = Field(1.2, gt=1)
+    lift_band: float = Field(0.05, gt=0, lt=1)
+    portfolio_size: int = Field(100_000, gt=0)
+
+
 class BusinessConfig(BaseModel):
     """Hypothèses métier."""
 
     real_churn_rate: Hypothesis
+    campaign: CampaignConfig = Field(default_factory=CampaignConfig)
 
 
 class Config(BaseModel):
