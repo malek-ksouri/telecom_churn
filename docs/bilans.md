@@ -629,6 +629,7 @@ Pour la suite, les réglages d'hyperparamètres seront lancés en arrière-plan,
 - *Pourquoi calibrer un modèle qui a déjà une bonne AUC ?* L'AUC mesure le classement, pas la justesse des probabilités. Pour chiffrer une campagne (départs attendus, revenu en jeu), il faut que « 0,7 » veuille dire 70 %. Ici le modèle brut était déjà proche (ECE 0,012), la sigmoïde ramène l'erreur à 0,005 sans toucher au classement.
 - *Pourquoi le taux réel ne change-t-il pas les clients ciblés ?* La correction multiplie les odds de tous les clients par la même constante : l'ordre est conservé, donc l'AUC et le top 10 % aussi. L'hypothèse de 2 % ne change que les chiffres absolus : c'est pour cela qu'on peut la présenter avec une sensibilité à 1 % et 3 % sans refaire le modèle.
 - *Pourquoi seulement 5,6 % de churners dans le top 10 %, alors qu'on en avait 79 % ?* 79 % était mesuré sur un échantillon où un client sur deux part ; en production, 2 % partent. Cibler les 10 % les plus risqués donne 5,6 %, **2,8 fois** le hasard : pour 1 000 clients contactés, le ciblage atteint environ 56 futurs churners contre 20 au hasard ; les départs évités dépendent du taux de succès de l'offre, à mesurer.
+  - *Note (ajoutée en E12)* : 56 pour 1 000 = top 10 % de tout le portefeuille, inactifs compris (performance du modèle) ; le chiffre de campagne officiel est **51 pour 1 000**, inactifs traités à part (E12).
 
 **Limites / points ouverts** :
 - Tous les chiffres de production reposent sur l'**hypothèse** de taux réel (D47) et sur la représentativité des classes de l'échantillon ; ils ne sont pas observés.
@@ -757,3 +758,231 @@ Pour la suite, les réglages d'hyperparamètres seront lancés en arrière-plan,
 - Il n'y a pas de coût ni de budget, donc pas de capacité optimale : la capacité est un choix métier.
 
 **Étape suivante** : E13 — API FastAPI (routers fins sur `churn.services` : fiche client, liste filtrée par niveau et segment, KPI, tableau de campagne, scoring d'un nouveau client avec raisons et action).
+
+## Bilan — Étape 13 : Couche de services et API FastAPI
+
+**Fait** :
+- **Préalables** :
+  - lignes réelles par niveau comparées aux effectifs repondérés (tableau ci-dessous) ;
+  - note « 56 pour 1 000 » ajoutée en E10 (notebook 06, cellule 47, et bilans), chiffres de E10 inchangés ;
+  - `n_rows` / `n_portfolio_equiv` généralisés ;
+  - poids de portefeuille stocké par ligne ;
+  - note d'hypothèse dans `kpis.json`.
+- **`churn.services`** (fonctions pures sur les artefacts en cache) :
+  - `store.py` : chargement unique, tranches d'affichage ;
+  - `filters.py` : 7 dimensions filtrables ;
+  - `analytics.py` : `get_kpis`, `get_filter_options`, `get_risk_distribution`, `get_segments`, `get_heatmap`, `get_drivers` ;
+  - `campaign.py` : `simulate_campaign` ;
+  - `customers.py` : `list_customers`, `get_customer`, `explain_customer`.
+- **`churn.business.campaign`** : `portfolio_weights`, `campaign_curve` (courbe vectorisée en un seul tri), champs `n_rows` / `n_portfolio_equiv`.
+- **Artefacts** : nouvel artefact `shap_values.parquet` (100 000 × 97 contributions) ; variables des raisons et du contexte ajoutées à `scores.parquet`.
+- **API** : `api/schemas.py` (36 schémas pydantic, unités et natures d'effectifs documentées), `api/dependencies.py` (filtres en paramètres de requête), `api/main.py`.
+- **Routers** : 8 routers (health, kpis, filters, risk, segments, drivers, campaign, customers), 11 chemins sous `/api`, CORS pour `http://localhost:5173`, 404 et 422 propres.
+- **Tests** : `tests/test_api.py` (22 tests) et 1 test ajouté à `tests/test_business.py`.
+
+**Fichiers** :
+- Créés : `src/churn/services/{store,filters,analytics,campaign,customers}.py`, `api/dependencies.py`, `api/routers/{health,kpis,filters,risk,segments,drivers,campaign,customers}.py`, `tests/test_api.py`, `artifacts/shap_values.parquet`
+- Modifiés :
+  - `api/{main,schemas}.py` (étaient vides), `src/churn/services/__init__.py` ;
+  - `src/churn/business/{campaign,actions}.py`, `scripts/build_artifacts.py` ;
+  - `tests/test_business.py`, `notebooks/08_business_analysis.ipynb` (réexécuté) ;
+  - `notebooks/06_evaluation_calibration.ipynb` (note), `docs/decisions.md`.
+
+**Résultats clés** :
+- **Lignes réelles et équivalent portefeuille** :
+
+  | Niveau | `n_rows` (base) | `n_portfolio_equiv` (estimation, 2 %) |
+  |---|---|---|
+  | High | 17 472 (17,5 %) | 9 876 (9,9 %) |
+  | Medium | 24 122 (24,1 %) | 19 836 (19,8 %) |
+  | Low | 56 434 (56,4 %) | 69 375 (69,4 %) |
+  | Inactif | 1 972 (2,0 %) | 913 (0,9 %) |
+  | Total | 100 000 | 100 000 |
+
+- **`GET /api/kpis`** :
+  - 2 002 churners attendus, 116 162 $ par mois en jeu (2,0 % de la facture) ;
+  - campagne officielle : 17 640 lignes ciblées ≈ 10 000 clients de portefeuille, **51,1 churners pour 1 000 contactés contre 20**, facteur 2,55 ;
+  - AUC hors fold 0,6941, test 0,6955.
+- **`GET /api/campaign/simulate`** (10 %, succès supposé 20 %, coût supposé 5 $) :
+  - 511 churners attendus (515 observés au contrôle) ;
+  - 102 départs évités (hypothèse) et 6 012 $ par mois préservés (hypothèse) ;
+  - coût 50 002 $, solde sur 1 mois −43 990 $ ; le solde dépend fortement de l'horizon et du coût supposés.
+  - Inactifs à part : 1 972 lignes ≈ 913 clients.
+- **`GET /api/customers/1072931`** : High, p = 6,4 % par mois, action « Offre de réengagement ». Raisons : fin d'engagement à 12 mois (+0,82), terminal à 30 $ (+0,18), 55 minutes par mois (+0,14). Contexte : classe de crédit AA, région Los Angeles.
+- **Temps de réponse** (troisième appel, `make api`) : de 5 à 177 ms, toutes sous l'objectif de 300 ms (fiche client 7 ms, simulateur avec courbe 139 ms, distribution 177 ms).
+- **Documentation** : `/docs` → 200, OpenAPI 3.1 avec 11 chemins et 36 schémas.
+- **Tests** : 120 passed ; ruff : OK.
+
+**Décisions et justification** : D91 à D95 dans `docs/decisions.md`.
+
+**À savoir défendre à l'oral** :
+- **Pourquoi deux effectifs ?** La base contient environ 50 % de churners, un vrai portefeuille environ 2 %. Une liste montre les 17 472 clients High de la base ; un KPI estime qu'un portefeuille réel de 100 000 clients en compterait environ 9 876. Les deux sont justes, à condition de dire lequel on affiche.
+- **Pourquoi l'API ne charge-t-elle pas le modèle ?** Tous les scores et toutes les explications sont précalculés et sans fuite (E12) : l'API ne fait que filtrer et agréger, d'où des réponses en quelques dizaines de millisecondes.
+- **Pourquoi le simulateur ne donne-t-il pas de gain par défaut ?** Parce que le taux de succès de l'offre et son coût sont inconnus : c'est l'utilisateur qui les saisit, et la réponse les renvoie comme hypothèses.
+
+**Limites / points ouverts** :
+- Pas de scoring d'un nouveau client en direct (non demandé en E13) : les 100 000 clients sont précalculés. Un endpoint de scoring chargerait `final_model.joblib`.
+- Le solde du simulateur compare un revenu mensuel à un coût ponctuel : l'horizon (paramètre) est une hypothèse de plus, à afficher dans le front.
+- Pas d'authentification (démonstration locale). Les données exposées sont celles du jeu de données public.
+- Le cache se charge au démarrage (environ 1 s) : après `make artifacts`, il faut redémarrer l'API (ou laisser `--reload` s'en charger).
+
+**Étape suivante** : E14 — squelette du frontend (Vite + React + TypeScript strict, Mantine, TanStack Query, client API généré depuis l'OpenAPI).
+
+---
+
+# Bilan de partie — C : Rendre utile + API (E9 à E13)
+
+## 1. Avancement par rapport au planning
+
+| Étape | Prévu | Réalisé | Statut |
+|---|---|---|---|
+| E9 Réglage, sélection, test final | Mer 30/09 | 30/09 | Dans les temps |
+| E10 Calibration + taux réel | Mer 30/09 | 30/09 | Dans les temps |
+| E11 Explicabilité SHAP | Mer 30/09 | 30/09 | Dans les temps |
+| E12 Scoring métier + artefacts | Mer 30/09 | 30/09 | Dans les temps |
+| E13 Services + API FastAPI | Mer 30/09 | 30/09 | Dans les temps |
+
+**Verdict : partie C terminée le jour prévu.** La partie D (frontend et assistant, jeudi 01/10) peut démarrer à l'heure. La finalisation reste prévue le vendredi 02/10 au matin.
+
+Ce qui a coûté du temps :
+- le réglage Optuna (50 essais), lancé en arrière-plan ;
+- `make artifacts`, qui prend 3 à 8 minutes pour les scores hors fold et le SHAP des 100 000 clients ;
+- les notebooks 06, exécutés en plusieurs sessions pour que chaque décision précède réellement la lecture du test ;
+- deux corrections demandées en cours de route : la formulation des départs évités (D79) et les deux natures d'effectifs (D92).
+
+## 2. Chiffres clés consolidés
+
+**E9 — Réglage et test final**
+- Optuna : 50 essais (42 complets). L'**essai 7** est retenu par la règle de l'écart-type : AUC 0,6942 ± 0,0042 en CV, écart train-validation 0,0545 (contre 0,112 pour le meilleur essai en AUC).
+- **Test : AUC 0,6955 [0,6881 ; 0,7024]**. LightGBM fait +26,9 millièmes de plus que la régression logistique [+23,0 ; +31,0]. L'écart entre CV et test est de +1,3 millième.
+
+**E10 — Calibration**
+- Calibration sigmoïde, choisie en CV : ECE 0,0129 → 0,0085 en CV, 0,0122 → 0,0046 sur le test. AUC inchangée.
+- Correction vers le taux réel **supposé** de 2 % : Precision@10 % attendue de 5,6 % (lift 2,80), sans changer le classement.
+
+**E11 — Explicabilité**
+- Trois facteurs dominent, quelle que soit la méthode : **âge du terminal** (12,2 % de l'importance SHAP), **évolution de l'usage** (7,4 %) et **ancienneté** (7,3 %).
+- Formes de l'EDA retrouvées : pic de risque à 11-12 mois (+0,51 en log-odds) et marche entre 300 et 310 jours d'âge du terminal.
+- Codes de raisons en phrases métier.
+
+**E12 — Scoring métier**
+- Scores sans fuite : AUC 0,6941 hors fold, 0,6955 sur le test.
+- Niveaux : High 10 %, Medium jusqu'à 30 %, inactifs à part.
+- **51 futurs churners pour 1 000 clients contactés, contre 20 au hasard**.
+- 116 000 $ de revenu mensuel en jeu pour 100 000 clients.
+
+**E13 — Services et API**
+- 11 endpoints, 36 schémas, réponses de 5 à 177 ms.
+- Deux effectifs nommés partout : `n_rows` (base) et `n_portfolio_equiv` (estimation).
+- 120 tests.
+
+## 3. Fiche du modèle final
+
+| Rubrique | Contenu |
+|---|---|
+| **Tâche** | Probabilité qu'un client parte dans la fenêtre de la cible (environ 1 mois, départ entre J+31 et J+60, D47) |
+| **Données** | 100 000 clients Cell2Cell ; train 80 000, test 20 000 (split stratifié, graine 42, fait avant l'EDA) ; 49,56 % de churners (échantillon équilibré) |
+| **Variables** | Colonnes brutes nettoyées par règles fixes + 5 familles de features (cycle d'engagement, tendance d'usage, forfait, compte et terminal, indicateurs de manquants) ; exclues : `Customer_ID`, `ethnic`, `churn` ; 97 variables d'origine après regroupement SHAP |
+| **Modèle** | LightGBM dans un pipeline sklearn (`FeatureBuilder` → modèle) |
+| **Calibration** | Sigmoïde (Platt), `CalibratedClassifierCV` avec CV interne à 5 folds, `ensemble=False` (un seul modèle) |
+| **Correction du prior** | p' = p·(r/s) / [p·(r/s) + (1 − p)·((1 − r)/(1 − s))], avec s = 0,4956 et r = **2 % par mois (hypothèse)**, sensibilité 1-3 % |
+| **Fichiers** | `models/pipeline.joblib` (brut), `models/final_model.joblib` (calibré + taux réel), `models/model_card.md` ; `make train` ne lit jamais le test |
+
+**Paramètres** (Optuna, essai 7, `configs/config.yaml`) :
+
+| num_leaves | max_depth | min_child_samples | learning_rate | n_estimators | subsample (freq 1) | colsample_bytree | reg_alpha | reg_lambda |
+|---|---|---|---|---|---|---|---|---|
+| 21 | 5 | 113 | 0,015253 | 850 | 0,537275 | 0,992132 | 1,22738 | 0,006235 |
+
+**Métriques** :
+
+| | AUC | PR-AUC | Brier | lift@10 % | Precision@10 % | Autre |
+|---|---|---|---|---|---|---|
+| CV (5 folds) | 0,6942 ± 0,0042 | – | 0,2211 | 1,57 | – | écart train-validation 0,0545 |
+| Hors fold (E12, 80 000) | 0,6941 | – | – | 1,57 | – | contrôle de fuite |
+| **Test (20 000)** | **0,6955 [0,6881 ; 0,7024]** | 0,683 | 0,2206 | 1,60 | 79,2 % | AUC clients actifs 0,693 ; LR 0,6686 ; règles 0,6174 |
+| Test, calibré | 0,6955 | – | 0,2204 | – | – | ECE 0,0122 → 0,0046 |
+| Test, au taux réel supposé de 2 % | 0,6955 | – | – | 2,80 | 5,6 % (attendue) | précision annoncée 5,5 %, observée 5,6 % |
+
+Precision@k sur le test (échantillon) : 83,3 % à 5 %, 79,2 % à 10 %, 73,6 % à 20 %.
+
+**Niveaux de risque** (seuils sur la probabilité calibrée, fixés sur les scores hors fold du train) :
+
+| Niveau | Règle | `n_rows` (base) | `n_portfolio_equiv` (estimation, 2 %) | Risque mensuel moyen | Churn observé dans la base |
+|---|---|---|---|---|---|
+| High | p ≥ 0,6484 (10 % du portefeuille) | 17 472 | 9 876 | 5,1 % | 72,4 % |
+| Medium | p ≥ 0,5327 (lift de bande > 1,2, jusqu'à 30 %) | 24 122 | 19 836 | 2,9 % | 58,9 % |
+| Low | le reste | 56 434 | 69 375 | 1,2 % | 37,5 % |
+| Inactif | 0 minute ou usage non mesuré | 1 972 | 913 | 7,2 % | 77,8 % |
+
+Le churn observé par niveau est le même sur le train et le test (High 72,3 % contre 73,0 %).
+
+**Chiffre officiel de campagne (D91)** :
+- Ciblage des 10 % de clients actifs les plus risqués : **environ 51 futurs churners pour 1 000 clients contactés, contre 20 au hasard** (facteur 2,55), soit 30 059 $ de revenu mensuel en jeu pour un portefeuille de 100 000 clients.
+- Les départs évités dépendent du taux de succès de l'offre, à mesurer.
+- Le « 56 pour 1 000 » de E10 est la performance du modèle, inactifs compris.
+
+**Usages et limites** : ce modèle sert à **classer** les clients à contacter, pas à prédire un départ certain : au taux supposé de 2 %, seuls 1,7 % des clients dépassent 10 % de risque mensuel, et le maximum est de 39,5 %. Les raisons SHAP décrivent le modèle, pas des causes. Il n'y a pas de validation temporelle, et les chiffres absolus dépendent de l'hypothèse de taux réel.
+
+## 4. Décisions prises (D72 à D95)
+
+| Thème | Décisions | En une phrase |
+|---|---|---|
+| Sélection | D72-D75 | Règle écrite avant les résultats ; essai 7 retenu par la règle de l'écart-type ; LightGBM choisi en CV avant toute lecture du test ; une seule évaluation finale |
+| Calibration et hypothèse | D76-D79 | Sigmoïde choisie en CV ; correction du prior vers 2 % (hypothèse) ; modèle livré `final_model.joblib` ; aucun départ évité sans taux de succès supposé |
+| Explicabilité | D80-D82 | TreeExplainer en log-odds, calculé sur le train ; features dérivées regroupées sur leur variable d'origine ; 3 codes de raisons en phrases métier |
+| Actionnable ou contexte | D83-D86 | Raisons et actions uniquement sur les facteurs actionnables ; ancienneté actionnable seulement à 11-12 mois ; inactifs à part (vérifier la ligne / reconquête) |
+| Scoring | D87-D90 | Scores hors fold pour le train ; niveaux fixés sur le portefeuille repondéré (capacité 10 %, lift de bande > 1,2) ; revenu en jeu = p' × facture, sans coût |
+| API | D91-D95 | 51 pour 1 000 officiel ; `n_rows` et `n_portfolio_equiv` ; services purs et API fine ; simulateur sous hypothèses saisies par l'utilisateur ; tranches fixes et drill-down |
+
+**Lectures du test** :
+- **Évaluation**, deux fois : en E9 (classement) et en E10 (rapport de calibration). Le modèle et la calibration étaient figés avant chaque lecture.
+- **Notation**, à partir de E12 : les clients du test sont notés comme de nouveaux clients, avec des seuils fixés sur le train.
+
+Aucune décision n'a dépendu du test.
+
+## 5. Risques pour la partie D (frontend et assistant)
+
+| Risque | Impact | Parade |
+|---|---|---|
+| **Confusion entre les deux effectifs** dans le front (17 472 lignes High contre environ 9 876 en équivalent portefeuille) | Chiffres contradictoires à l'écran, perte de crédibilité à l'oral | Types générés depuis l'OpenAPI (noms `n_rows` et `n_portfolio_equiv`) ; libellés fixes « clients dans la base » et « équivalent portefeuille (estimation, 2 %) » ; note d'hypothèse visible sur les KPI |
+| **Départs évités présentés comme des résultats** (simulateur, assistant) | Contradiction avec D79 | Curseur de taux de succès étiqueté « hypothèse » ; coût et solde masqués sans coût saisi ; l'assistant répète la formulation officielle |
+| **Horizon du solde** : revenu mensuel comparé à un coût ponctuel | Solde négatif mal interprété (−43 990 $ à 1 mois pour un coût supposé de 5 $) | Afficher l'horizon (paramètre) à côté du solde ; le laisser au choix de l'utilisateur |
+| **Assistant qui calcule ou invente** | Chiffres faux ou non traçables | Outils de `churn.assistant.tools` qui encapsulent `churn.services` uniquement ; 5 appels maximum ; réponses citant l'outil et les hypothèses |
+| **Fournisseur de LLM non choisi** (point ouvert du contexte) | Blocage de E16 | Choisir avant E16 ; clé uniquement dans `.env`, jamais dans le front |
+| **Journée D chargée** (4 étapes en un jour) | Retard sur le vendredi | Pages construites sur des endpoints déjà testés ; priorité : vue d'ensemble, liste et fiche client, simulateur ; les finitions ensuite |
+| **Artefacts reconstruits alors que l'API tourne** | Données en cache périmées | Redémarrer l'API après `make artifacts` (vérifier `/api/health`, date des artefacts) |
+| **Lecture causale des raisons SHAP** | Promesse d'effet d'une action | Mention « selon le modèle » sur la fiche client et dans l'assistant ; action = suggestion, pas garantie |
+
+## 6. Questions d'oral probables
+
+1. **Comment êtes-vous sûrs que le test n'a pas influencé vos choix ?**
+   - Toutes les décisions (modèle final, essai 7, calibration sigmoïde, seuils des niveaux) ont été prises en validation croisée sur le train, et inscrites dans `decisions.md` et la config **avant** chaque lecture du test.
+   - Le code refuse de lire le test sans `final_evaluation=True`.
+   - Le test a été lu deux fois pour évaluer (classement en E9, calibration en E10), puis seulement pour noter des clients en E12.
+   - Résultat : le test (0,6955) est dans l'intervalle de la CV (0,6942 ± 0,0042). Il n'y a pas d'optimisme visible.
+
+2. **Vous annoncez 79 % de churners dans le top 10 %, puis 5,6 %, puis 51 pour 1 000. Lequel est vrai ?**
+   Les trois, pour trois questions différentes :
+   - **79 %** : sur l'échantillon, où un client sur deux part ;
+   - **5,6 %** : dans un portefeuille réel au taux supposé de 2 %, on repondère les classes, et le top 10 % en contient 2,8 fois plus que le hasard. C'est la performance du modèle ;
+   - **51 pour 1 000** : le chiffre de **campagne**, une fois les inactifs retirés de l'offre, qui sont traités à part.
+
+   Dans les trois cas, ce sont des churners **atteints**, pas des départs évités : ceux-ci dépendent du taux de succès de l'offre, à mesurer.
+
+3. **À quoi sert la calibration, et que se passe-t-il si le vrai taux n'est pas 2 % ?**
+   - La calibration fait que « 0,7 » signifie bien 70 % sur l'échantillon (ECE de 0,012 à 0,005). La correction du prior ramène ensuite la probabilité au taux réel.
+   - Les deux transformations sont **monotones** : le classement, l'AUC et les clients ciblés ne changent pas.
+   - Si le vrai taux est de 1 % ou de 3 %, les montants (churners attendus, revenu en jeu) sont presque proportionnels, mais le facteur par rapport au hasard reste à 2,5-2,6. On présente donc toujours l'hypothèse et sa sensibilité.
+
+4. **Comment avez-vous fixé les niveaux High, Medium et Low ?**
+   - **High** = la capacité de la campagne (10 % du portefeuille), un choix métier en config.
+   - **Medium** = les bandes de 5 % suivantes, tant que leur taux de churn reste supérieur à 1,2 fois la moyenne. Il s'arrête à 30 %, car la bande 30-35 % tombe à 1,13.
+   - On utilise le lift **de la bande** et pas le lift cumulé, qui aurait étendu Medium jusqu'à 75 % en profitant des clients High.
+   - Le tout est calculé sur des scores hors fold, repondérés au portefeuille réel, et vérifié sur le test : même churn observé par niveau.
+
+5. **Le modèle dit que la fin d'engagement augmente le risque : une offre de réengagement va-t-elle retenir ces clients ?**
+   - On ne le sait pas. SHAP explique **le modèle** : selon lui, être à 11-12 mois d'ancienneté est associé à un risque plus élevé (+0,51 en log-odds). Ce n'est pas une preuve qu'agir sur ce facteur réduit le départ.
+   - C'est pourquoi les raisons affichées ne portent que sur des facteurs **actionnables**, l'action est une **suggestion**, et le simulateur demande un taux de succès **supposé**.
+   - La vraie réponse viendra d'un test avec un groupe témoin.
+   - Même prudence pour les clients inactifs (0 minute) : le modèle les voit très risqués (7,2 %), mais ils sont peut-être déjà perdus, d'où une action distincte (vérifier la ligne, reconquête).

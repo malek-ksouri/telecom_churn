@@ -17,7 +17,14 @@ from churn.business.actions import (
     family,
     suggest_action,
 )
-from churn.business.campaign import INACTIVE_ROW, campaign_table, revenue_at_risk
+from churn.business.campaign import (
+    INACTIVE_ROW,
+    PORTFOLIO_WEIGHT,
+    campaign_curve,
+    campaign_table,
+    portfolio_weights,
+    revenue_at_risk,
+)
 from churn.business.scoring import (
     HIGH,
     INACTIVE,
@@ -122,11 +129,28 @@ def test_campaign_table(portfolio: pd.DataFrame) -> None:
     table = campaign_table(df, capacities=[0.05, 0.10], real_rate=R,
                            portfolio_size=100_000).set_index("groupe")
     top10 = table.loc["Top 10 % (actifs)"]
-    assert top10["clients"] == pytest.approx(10_000, rel=0.01)
-    assert top10["churners_hasard"] == pytest.approx(top10["clients"] * R)
+    assert top10["n_portfolio_equiv"] == pytest.approx(10_000, rel=0.01)
+    assert top10["churners_hasard"] == pytest.approx(top10["n_portfolio_equiv"] * R)
     assert top10["facteur_vs_hasard"] > 1
     total = table.loc["Portefeuille entier"]
-    assert total["clients"] == pytest.approx(100_000)
+    assert total["n_portfolio_equiv"] == pytest.approx(100_000)
     assert total["churners_observes"] == pytest.approx(100_000 * R)
-    assert table.loc[INACTIVE_ROW, "clients"] > 0
+    assert table.loc[INACTIVE_ROW, "n_portfolio_equiv"] > 0
     assert (table["revenu_en_jeu"] >= 0).all()
+
+
+def test_portfolio_weights_keep_global_scale_when_filtered(portfolio: pd.DataFrame) -> None:
+    df = portfolio.assign(inactif=is_inactive(portfolio))
+    df["revenu_en_jeu"] = revenue_at_risk(df["proba_reelle"], df["rev_Mean"])
+    df[PORTFOLIO_WEIGHT] = portfolio_weights(df["churn"], R, portfolio_size=100_000)
+    assert df[PORTFOLIO_WEIGHT].sum() == pytest.approx(100_000)
+    half = df.iloc[: len(df) // 2]
+    total = campaign_table(half, capacities=[0.10], real_rate=R).set_index("groupe")
+    # Un sous-ensemble représente sa part du portefeuille, pas 100 000 clients.
+    assert total.loc["Portefeuille entier", "n_portfolio_equiv"] == pytest.approx(
+        half[PORTFOLIO_WEIGHT].sum())
+    assert total.loc["Portefeuille entier", "n_rows"] == len(half)
+    curve = campaign_curve(half, [0.0, 0.10, 0.50, 1.0], real_rate=R)
+    assert curve["n_rows"].is_monotonic_increasing and curve["n_rows"].iloc[0] == 0
+    assert curve["churners_attendus"].is_monotonic_increasing
+    assert curve["n_rows"].iloc[-1] == int((~half["inactif"]).sum())

@@ -11,8 +11,10 @@
 
 Sorties :
 - ``artifacts/scores.parquet`` : une ligne par client ;
-- ``artifacts/shap.parquet`` : les 8 premiers facteurs SHAP de chaque client ;
-- ``artifacts/kpis.json`` : seuils, niveaux, campagne, contrôles ;
+- ``artifacts/shap.parquet`` : les 8 premiers facteurs SHAP de chaque client (avec phrases) ;
+- ``artifacts/shap_values.parquet`` : contributions SHAP de toutes les variables d'origine
+  (log-odds, float32), une ligne par client, pour agréger les facteurs par filtre (API) ;
+- ``artifacts/kpis.json`` : seuils, niveaux, campagne, contrôles, note d'hypothèse ;
 - ``reports/tier_bands.csv`` et ``reports/figures/08_tiers_lift.png``.
 
 Le test est lu pour être **noté** (comme le serait un nouveau client), pas pour évaluer ni
@@ -33,7 +35,13 @@ import numpy as np
 import pandas as pd
 
 from churn.business.actions import explain_clients, suggest_action
-from churn.business.campaign import campaign_table, revenue_at_risk, tier_summary
+from churn.business.campaign import (
+    PORTFOLIO_WEIGHT,
+    campaign_table,
+    portfolio_weights,
+    revenue_at_risk,
+    tier_summary,
+)
 from churn.business.scoring import (
     TEST,
     TRAIN_OOF,
@@ -59,12 +67,14 @@ DISPLAY_COLUMNS = ["months", "eqpdays", "mou_Mean", "change_mou", "totmrc_Mean",
                    "hnd_price", "custcare_Mean", "drop_vce_Mean", "actvsubs", "crclscod", "area"]
 
 
-def explain_partition(pipeline, X: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Raisons, contexte et facteurs SHAP des clients de ``X`` avec le modèle qui les a notés."""
+def explain_partition(pipeline, X: pd.DataFrame
+                      ) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    """Raisons, contexte, facteurs principaux et contributions regroupées des clients de ``X``,
+    avec le modèle qui les a notés."""
     result = ShapExplainer(pipeline).explain(X)
     wide, factors = explain_clients(result)
     wide["valeur_base"] = result.base_value
-    return wide, factors
+    return wide, factors, result.grouped().astype("float32")
 
 
 def _records(df: pd.DataFrame) -> list[dict]:
@@ -90,6 +100,7 @@ def main() -> int:
              for m in fold_models]
     train_wide = pd.concat([p[0] for p in parts]).loc[train.index]
     train_factors = pd.concat([p[1] for p in parts])
+    train_matrix = pd.concat([p[2] for p in parts]).loc[train.index]
 
     # 2. Seuils des niveaux, fixés sur les clients actifs du train (avant la lecture du test).
     sample_rate = float(y.mean())
@@ -102,12 +113,15 @@ def main() -> int:
     final_model = joblib.load(cfg.paths.models_dir / "final_model.joblib")
     test = load_test(final_evaluation=True)
     test_scores = final_scores(final_model, test)
-    test_wide, test_factors = explain_partition(raw_pipeline(final_model.calibrated), test)
+    test_wide, test_factors, test_matrix = explain_partition(raw_pipeline(final_model.calibrated),
+                                                             test)
 
     # 4. Assemblage : une ligne par client, identifiée par Customer_ID.
-    frames, factor_frames = [], []
-    for df, scores, wide, factors in [(train, oof, train_wide, train_factors),
-                                      (test, test_scores, test_wide, test_factors)]:
+    frames, factor_frames, matrices = [], [], []
+    for df, scores, wide, factors, matrix in [
+            (train, oof, train_wide, train_factors, train_matrix),
+            (test, test_scores, test_wide, test_factors, test_matrix)]:
+        matrices.append(matrix.set_axis(df[id_col].to_numpy()).rename_axis(id_col))
         out = pd.concat([df[[id_col]], scores], axis=1)
         out["inactif"] = is_inactive(df)
         out["niveau"] = assign_tiers(out["proba_calibree"], out["inactif"], thresholds)
@@ -123,6 +137,9 @@ def main() -> int:
                                     "partition": scores["partition"].iloc[0]})
         factor_frames.append(factors.drop(columns="client"))
     scores_all = pd.concat(frames, ignore_index=True)
+    # Équivalent portefeuille de chaque ligne (somme = 100 000 ; hypothèse de taux réel).
+    scores_all[PORTFOLIO_WEIGHT] = portfolio_weights(scores_all[target], r, sample_rate)
+    shap_matrix = pd.concat(matrices).reset_index()
     factors_all = pd.concat(factor_frames, ignore_index=True)
     factors_all = factors_all[[id_col, "partition", *factors_all.columns[:-2]]]
 
@@ -142,11 +159,14 @@ def main() -> int:
     cfg.paths.artifacts_dir.mkdir(parents=True, exist_ok=True)
     scores_path = cfg.paths.artifacts_dir / "scores.parquet"
     shap_path = cfg.paths.artifacts_dir / "shap.parquet"
+    matrix_path = cfg.paths.artifacts_dir / "shap_values.parquet"
+    shap_matrix.to_parquet(matrix_path, index=False)
     scores_all.to_parquet(scores_path, index=False)
     factors_all.to_parquet(shap_path, index=False)
     bands.to_csv(cfg.paths.reports_dir / "tier_bands.csv")
 
     hyp = cfg.business.real_churn_rate
+    size_text = f"{cfg.business.campaign.portfolio_size:,}".replace(",", " ")
     kpis = {
         "date": datetime.now().isoformat(timespec="minutes"),
         "modele": cfg.models.final,
@@ -158,10 +178,20 @@ def main() -> int:
                                  "préservé n'est calculé (D79)",
             "couts": "aucun coût supposé",
         },
+        "note_effectifs": {
+            "n_rows": "clients dans la base : lignes réelles du jeu de données (environ 50 % de "
+                      "churners), utilisées pour les listes et les filtres",
+            "n_portfolio_equiv": "ESTIMATION : équivalent dans un portefeuille réel de "
+                                 f"{size_text} clients au taux de churn supposé de "
+                                 f"{100 * hyp.value:g} % par mois (hypothèse), obtenu en "
+                                 "repondérant chaque ligne ; utilisé pour les KPI et la campagne",
+            "montants": "churners attendus et revenu en jeu sont exprimés en équivalent "
+                        "portefeuille (estimations sous l'hypothèse de taux réel)",
+        },
         "campagne_config": cfg.business.campaign.model_dump(),
-        "clients": {"total": len(scores_all),
-                    **scores_all["partition"].value_counts().to_dict(),
-                    "inactifs": int(scores_all["inactif"].sum())},
+        "n_rows": {"total": len(scores_all),
+                   **scores_all["partition"].value_counts().to_dict(),
+                   "inactifs": int(scores_all["inactif"].sum())},
         "taux_churn_echantillon_train": sample_rate,
         "seuils": thresholds.to_dict(),
         "bandes_lift": _records(bands.reset_index()),
@@ -184,6 +214,7 @@ def main() -> int:
     logger.info("Artefacts construits en %.0f s", time.perf_counter() - start)
     print(f"scores : {scores_path} ({len(scores_all)} lignes, {scores_all.shape[1]} colonnes)")
     print(f"shap   : {shap_path} ({len(factors_all)} lignes)")
+    print(f"matrice: {matrix_path} ({shap_matrix.shape[0]} x {shap_matrix.shape[1] - 1} variables)")
     print(f"kpis   : {kpis_path}")
     print(f"seuils : High >= {thresholds.high:.4f}, Medium >= {thresholds.medium:.4f} "
           f"(High {100 * thresholds.capacity:.0f} %, High + Medium "

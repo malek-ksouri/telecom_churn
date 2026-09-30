@@ -115,9 +115,10 @@ def explain_clients(result: ShapResult, n_reasons: int = 3, n_context: int = 2,
         chunk: taille des paquets de clients pour la rédaction des phrases.
 
     Returns:
-        ``(par_client, facteurs)`` : une ligne par client (``raison_1..n``, ``contexte_1..n``,
-        variable et famille dominantes) ; et un tableau long des ``n_factors`` premiers
-        facteurs de chaque client (rang, variable, phrase, contribution, famille).
+        ``(par_client, facteurs)`` : une ligne par client (``raison_1..n``, ``contexte_1..n``
+        et leurs variables ``*_variable``, variable et famille dominantes) ; et un tableau long
+        des ``n_factors`` premiers facteurs de chaque client (rang, variable, phrase,
+        contribution, famille).
     """
     grouped = result.grouped()
     variables = np.asarray(grouped.columns)
@@ -142,6 +143,7 @@ def explain_clients(result: ShapResult, n_reasons: int = 3, n_context: int = 2,
             for k in range(n_reasons):
                 v = variables[r_idx[i, k]]
                 out[f"raison_{k + 1}"] = describe(v, row) if r_ok[i, k] else None
+                out[f"raison_{k + 1}_variable"] = v if r_ok[i, k] else None
             dominant = r_idx[i, 0] if r_ok[i, 0] else None
             out["facteur_dominant"] = None if dominant is None else label(variables[dominant])
             out["famille_dominante"] = None if dominant is None else fams[i, dominant]
@@ -150,6 +152,7 @@ def explain_clients(result: ShapResult, n_reasons: int = 3, n_context: int = 2,
                 sens = INCREASES if G[i, j] > 0 else DECREASES
                 out[f"contexte_{k + 1}"] = (f"{describe(variables[j], row)} ({sens})"
                                            if c_ok[i, k] else None)
+                out[f"contexte_{k + 1}_variable"] = variables[j] if c_ok[i, k] else None
             wide_rows.append(out)
             for rank, j in enumerate(f_idx[i], start=1):
                 long_rows.append({
