@@ -587,3 +587,53 @@ Pour la suite, les réglages d'hyperparamètres seront lancés en arrière-plan,
 - Le notebook 06 a été exécuté en trois sessions (réglage, choix de l'essai, test), assemblées ensuite, pour que la décision précède réellement la lecture du test.
 
 **Étape suivante** : E10 — Calibration (en CV) et correction du prior vers le taux réel mensuel (2 %, sensibilité 1-3 %, D47).
+
+## Bilan — Étape 10 : Calibration et correction vers le taux réel
+
+**Fait** :
+- `churn.evaluation.calibration` : `adjust_prior` (formule de Bayes sur les odds), courbe de fiabilité, ECE, `make_calibrated` (`CalibratedClassifierCV`, CV interne à 5 folds, `ensemble=False`), Precision@k attendue en production (repondération des classes)
+- Comparaison en CV (folds de E6) du modèle brut, de la calibration sigmoïde et de l'isotonique ; règle de choix fixée avant les résultats ; décision D76 inscrite **avant** la lecture du test
+- Rapport de calibration sur le test (2e lecture, sans effet sur les décisions) ; sensibilité au taux réel (1 %, 2 %, 3 %) : distribution des probabilités corrigées, Precision@10 % attendue, vérification de l'AUC
+- `churn.models.final.FinalChurnModel` et `make train` → `models/final_model.joblib` ; fiche du modèle complétée (section calibration)
+- `notebooks/06_evaluation_calibration.ipynb`, 2e partie (sections 4 à 6) ; tests `tests/test_calibration.py` (6 tests)
+
+**Fichiers** :
+- Créés : `src/churn/evaluation/calibration.py`, `src/churn/models/final.py`, `tests/test_calibration.py`, `models/final_model.joblib`, `reports/figures/06_{fiabilite_cv,fiabilite_test,distribution_probas}.png`
+- Modifiés : `configs/config.yaml` (`models.calibration: sigmoid`), `src/churn/config.py` (`write_models_field`), `scripts/train.py`, `src/churn/models/model_card.py`, `models/model_card.md`, `reports/final_metrics.json`, `src/churn/charts.py`, `docs/decisions.md`
+
+**Résultats clés** :
+
+| | Brier | ECE | AUC |
+|---|---|---|---|
+| CV brut | 0,22109 | 0,0129 | 0,69415 |
+| CV sigmoïde (retenue) | **0,22093** | **0,0085** | 0,69415 |
+| CV isotonique | 0,22100 | 0,0090 | 0,69393 |
+| Test brut | 0,22060 | 0,0122 | 0,69547 |
+| Test sigmoïde | **0,22042** | **0,0046** | 0,69547 |
+
+- Modèle brut sous-confiant aux extrêmes (décile le plus risqué : 0,766 annoncé, 79,2 % observé) ; la sigmoïde étire les probabilités (0,065 à 0,966) et les ramène sur la diagonale
+- Sensibilité (population simulée au taux réel **supposé**) :
+
+| r (hypothèse) | p' médiane | p' 90e centile | Precision@10 % attendue | lift@10 % |
+|---|---|---|---|---|
+| 1 % par mois | 0,8 % | 1,9 % | 2,8 % | 2,84 |
+| **2 % par mois** | **1,6 %** | **3,7 %** | **5,6 %** | **2,80** |
+| 3 % par mois | 2,5 % | 5,6 % | 8,3 % | 2,78 |
+
+- AUC identique pour les trois hypothèses (écart 0,0) ; précision annoncée par le modèle 5,5 % contre 5,6 % observée (à 2 %)
+- Tests : 87 passed ; ruff : OK
+
+**Décisions et justification** : D76 à D78 dans `docs/decisions.md`.
+
+**À savoir défendre à l'oral** :
+- *Pourquoi calibrer un modèle qui a déjà une bonne AUC ?* L'AUC mesure le classement, pas la justesse des probabilités. Pour chiffrer une campagne (départs attendus, revenu en jeu), il faut que « 0,7 » veuille dire 70 %. Ici le modèle brut était déjà proche (ECE 0,012), la sigmoïde ramène l'erreur à 0,005 sans toucher au classement.
+- *Pourquoi le taux réel ne change-t-il pas les clients ciblés ?* La correction multiplie les odds de tous les clients par la même constante : l'ordre est conservé, donc l'AUC et le top 10 % aussi. L'hypothèse de 2 % ne change que les chiffres absolus : c'est pour cela qu'on peut la présenter avec une sensibilité à 1 % et 3 % sans refaire le modèle.
+- *Pourquoi seulement 5,6 % de churners dans le top 10 %, alors qu'on en avait 79 % ?* 79 % était mesuré sur un échantillon où un client sur deux part ; en production, 2 % partent. Cibler les 10 % les plus risqués donne 5,6 %, **2,8 fois** le hasard : pour 1 000 clients contactés, le ciblage atteint environ 56 futurs churners contre 20 au hasard ; les départs évités dépendent du taux de succès de l'offre, à mesurer.
+
+**Limites / points ouverts** :
+- Tous les chiffres de production reposent sur l'**hypothèse** de taux réel (D47) et sur la représentativité des classes de l'échantillon ; ils ne sont pas observés.
+- Le test a été lu deux fois (E9 : classement ; E10 : calibration) ; modèle et calibration étaient figés avant chaque lecture, aucune décision n'en a dépendu.
+- La calibration ne corrige pas une éventuelle dérive dans le temps (pas de validation temporelle).
+- Notebook 06, 2e partie : deux sessions (CV, puis test) assemblées, pour que D76 précède réellement la lecture du test.
+
+**Étape suivante** : E11 — Explicabilité SHAP (globale et par client, codes de raisons), sur le modèle final.

@@ -44,6 +44,8 @@ features:
 models:
   # Modèle final : choisi en E9 sur la CV, AVANT la lecture du test (D73) ; ne change plus ensuite.
   final: lightgbm
+  # Calibration du modèle final : choisie en CV avant la lecture du test (E10).
+  calibration: sigmoid
   params:
     # Régression logistique améliorée : réglage de E7 (C choisi en CV), sans doublons (D69).
     logreg:

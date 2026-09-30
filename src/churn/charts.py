@@ -553,3 +553,44 @@ def cumulative_gain_chart(curves: dict[str, pd.DataFrame], title: str,
     fig.update_layout(title=title, xaxis_title="part des clients ciblés, du plus risqué (%)",
                       yaxis_title=y_title, height=460)
     return fig
+
+
+def reliability_chart(tables: dict[str, pd.DataFrame], title: str) -> go.Figure:
+    """Courbes de fiabilité : taux observé contre probabilité moyenne prédite, par classe.
+
+    La diagonale est la calibration parfaite ; au plus trois séries (couleurs 1 à 3).
+    """
+    colors = [NO_CHURN, CHURN, "#1baf7a"]
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=[0, 1], y=[0, 1], mode="lines", name="calibration parfaite",
+                             line={"color": INK_SECONDARY, "width": 1, "dash": "dash"}))
+    for i, (name, t) in enumerate(tables.items()):
+        fig.add_trace(go.Scatter(
+            x=t["p_moyenne"], y=t["taux_observe"], mode="lines+markers", name=name,
+            line={"color": colors[i % 3], "width": 2}, marker={"size": 8},
+            customdata=t["n"],
+            hovertemplate=f"{name}<br>prédit %{{x:.3f}}<br>observé %{{y:.3f}}"
+                          "<br>%{customdata} clients<extra></extra>"))
+    fig.update_layout(title=title, xaxis_title="probabilité moyenne prédite (par décile)",
+                      yaxis_title="taux de churn observé", height=500)
+    return fig
+
+
+def probability_distribution_chart(probas: dict[str, np.ndarray], title: str,
+                                   bins: int = 60) -> go.Figure:
+    """Distribution des probabilités (histogrammes en lignes, échelle log des probabilités)."""
+    colors = [NO_CHURN, CHURN, "#1baf7a"]
+    all_p = np.concatenate([np.asarray(p) for p in probas.values()])
+    edges = np.logspace(np.log10(max(all_p.min(), 1e-4)), np.log10(all_p.max()), bins + 1)
+    centers = np.sqrt(edges[:-1] * edges[1:])
+    fig = go.Figure()
+    for i, (name, p) in enumerate(probas.items()):
+        counts, _ = np.histogram(p, bins=edges)
+        fig.add_trace(go.Scatter(x=centers, y=100 * counts / counts.sum(), mode="lines",
+                                 name=name, line={"color": colors[i % 3], "width": 2,
+                                                  "shape": "hvh"},
+                                 hovertemplate=f"{name}<br>p ≈ %{{x:.3f}}<br>%{{y:.1f}} % "
+                                               "des clients<extra></extra>"))
+    fig.update_xaxes(type="log", title_text="probabilité de churn corrigée (échelle log)")
+    fig.update_layout(title=title, yaxis_title="part des clients (%)", height=460)
+    return fig

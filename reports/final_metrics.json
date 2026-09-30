@@ -98,5 +98,39 @@
       "ic_haut": 0.08517683439908663,
       "part_positive": 1.0
     }
+  },
+  "calibration": {
+    "methode": "sigmoid",
+    "sample_rate": 0.495625,
+    "brier_brut": 0.2205997038151667,
+    "brier_calibre": 0.22041932646147097,
+    "ece_brut": 0.012217188924069445,
+    "ece_calibre": 0.004594405198554525,
+    "auc_brut": 0.6954652168263911,
+    "auc_calibre": 0.6954652168263911,
+    "sensibilite": {
+      "0.01": {
+        "proba_moyenne": 0.010009881307270251,
+        "precision_top10_production": 0.028349560442857576,
+        "precision_top10_annoncee": 0.027680222803160168,
+        "lift_top10_production": 2.8349560442857578,
+        "auc": 0.6954652168263911
+      },
+      "0.02": {
+        "proba_moyenne": 0.02002146310331157,
+        "precision_top10_production": 0.056085419608674525,
+        "precision_top10_annoncee": 0.054717794936889684,
+        "lift_top10_production": 2.804270980433726,
+        "auc": 0.6954652168263911
+      },
+      "0.03": {
+        "proba_moyenne": 0.030034728758030534,
+        "precision_top10_production": 0.08337090948790599,
+        "precision_top10_annoncee": 0.08110143354331195,
+        "lift_top10_production": 2.779030316263533,
+        "auc": 0.6954652168263911
+      }
+    },
+    "hypothese": "taux réel supposé (D47), non issu des données"
   }
 }

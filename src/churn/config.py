@@ -60,6 +60,7 @@ class ModelsConfig(BaseModel):
     """Paramètres réglés par modèle et modèle final retenu (E9)."""
 
     final: str | None = None
+    calibration: str | None = None
     params: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 
@@ -184,12 +185,19 @@ def write_model_params(model: str, params: dict[str, Any], path: Path | None = N
     get_config.cache_clear()
 
 
-def write_final_model(name: str, path: Path | None = None) -> None:
-    """Inscrit le modèle final (ligne ``final:`` de la section ``models``)."""
+def write_models_field(field: str, value: str, path: Path | None = None) -> None:
+    """Remplace la valeur d'un champ simple de ``models`` (``final``, ``calibration``)."""
     path = path or find_project_root() / CONFIG_RELATIVE_PATH
     lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
-    idx = next(i for i, line in enumerate(lines) if line.strip().startswith("final:"))
+    start = next(i for i, line in enumerate(lines) if line.rstrip() == "models:")
+    idx = next(i for i, line in enumerate(lines[start:], start=start)
+               if line.strip().startswith(f"{field}:"))
     indent = lines[idx][: len(lines[idx]) - len(lines[idx].lstrip())]
-    lines[idx] = f"{indent}final: {name}\n"
+    lines[idx] = f"{indent}{field}: {value}\n"
     path.write_text("".join(lines), encoding="utf-8")
     get_config.cache_clear()
+
+
+def write_final_model(name: str, path: Path | None = None) -> None:
+    """Inscrit le modèle final (champ ``final`` de la section ``models``)."""
+    write_models_field("final", name, path)

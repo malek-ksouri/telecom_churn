@@ -97,6 +97,37 @@ def build_model_card(n_train: int) -> str:
         lines.append("")
     else:
         lines += ["*Métriques de test non disponibles (notebook 06 non exécuté).*", ""]
+    calib = (json.loads(metrics_path.read_text(encoding="utf-8")).get("calibration")
+             if metrics_path.is_file() else None)
+    if calib and cfg.models.calibration:
+        lines += [
+            "## Calibration et taux réel",
+            "",
+            f"- **Méthode** : calibration {cfg.models.calibration} (`CalibratedClassifierCV`, "
+            "CV interne à 5 folds sur le train), choisie en CV avant la lecture du test (E10).",
+            f"- **Test** : Brier {_fmt(calib['brier_brut'])} (brut) → "
+            f"{_fmt(calib['brier_calibre'])} (calibré) ; ECE {_fmt(calib['ece_brut'])} → "
+            f"{_fmt(calib['ece_calibre'])}.",
+            "- **Correction du prior** : p' = p·(r/s) / [p·(r/s) + (1 − p)·((1 − r)/(1 − s))], "
+            f"s = {_fmt(calib['sample_rate'])} (échantillon), r = taux réel **supposé**. "
+            "Transformation monotone : l'AUC et le classement sont inchangés.",
+            "- **Modèle livré** : `models/final_model.joblib` (`FinalChurnModel` : probabilité "
+            "sur l'échantillon pour le classement, probabilité au taux réel pour les chiffres "
+            "métier).",
+            "",
+            "| Taux réel (hypothèse) | Probabilité moyenne corrigée | Precision@10 % attendue | "
+            "Lift@10 % attendu |",
+            "|---|---|---|---|",
+            *[f"| {100 * float(r):.0f} % par mois | {_fmt(v['proba_moyenne'])} | "
+              f"{_fmt(v['precision_top10_production'], 3)} | "
+              f"{_fmt(v['lift_top10_production'], 2)} |"
+              for r, v in calib["sensibilite"].items()],
+            "",
+            "- **Lecture** : à 2 % de churn mensuel (hypothèse), pour 1 000 clients contactés, le "
+            "ciblage atteint environ 56 futurs churners contre 20 au hasard ; les départs évités "
+            "dépendent du taux de succès de l'offre, à mesurer (il n'est pas dans les données).",
+            "",
+        ]
     lines += [
         "## Limites",
         "",

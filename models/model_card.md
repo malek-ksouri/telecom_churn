@@ -50,6 +50,21 @@
 | LR améliorée (information) | 0,6686 [0,6610 ; 0,6760] | 0,6529 | 0,2281 | 1,515 | 0,751 | 0,6667 |
 | Règles E4 (information) | 0,6174 [0,6093 ; 0,6248] | 0,5876 | 0,2390 | 1,329 | 0,658 | 0,6179 |
 
+## Calibration et taux réel
+
+- **Méthode** : calibration sigmoid (`CalibratedClassifierCV`, CV interne à 5 folds sur le train), choisie en CV avant la lecture du test (E10).
+- **Test** : Brier 0,2206 (brut) → 0,2204 (calibré) ; ECE 0,0122 → 0,0046.
+- **Correction du prior** : p' = p·(r/s) / [p·(r/s) + (1 − p)·((1 − r)/(1 − s))], s = 0,4956 (échantillon), r = taux réel **supposé**. Transformation monotone : l'AUC et le classement sont inchangés.
+- **Modèle livré** : `models/final_model.joblib` (`FinalChurnModel` : probabilité sur l'échantillon pour le classement, probabilité au taux réel pour les chiffres métier).
+
+| Taux réel (hypothèse) | Probabilité moyenne corrigée | Precision@10 % attendue | Lift@10 % attendu |
+|---|---|---|---|
+| 1 % par mois | 0,0100 | 0,028 | 2,83 |
+| 2 % par mois | 0,0200 | 0,056 | 2,80 |
+| 3 % par mois | 0,0300 | 0,083 | 2,78 |
+
+- **Lecture** : à 2 % de churn mensuel (hypothèse), pour 1 000 clients contactés, le ciblage atteint environ 56 futurs churners contre 20 au hasard ; les départs évités dépendent du taux de succès de l'offre, à mesurer (il n'est pas dans les données).
+
 ## Limites
 
 - **Probabilités non calibrées** et issues d'un échantillon équilibré : ne pas les lire comme des probabilités réelles avant E10.
