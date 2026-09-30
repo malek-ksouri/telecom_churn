@@ -986,3 +986,58 @@ Aucune décision n'a dépendu du test.
    - C'est pourquoi les raisons affichées ne portent que sur des facteurs **actionnables**, l'action est une **suggestion**, et le simulateur demande un taux de succès **supposé**.
    - La vraie réponse viendra d'un test avec un groupe témoin.
    - Même prudence pour les clients inactifs (0 minute) : le modèle les voit très risqués (7,2 %), mais ils sont peut-être déjà perdus, d'où une action distincte (vérifier la ligne, reconquête).
+
+## Bilan — Étape 16 : Assistant IA (backend)
+
+**Fait** :
+- **`churn.assistant.llm_client`** :
+  - interface `LLMClient` (conversation avec outils et streaming, messages neutres) ;
+  - `GeminiClient` (SDK `google-genai`, signatures de raisonnement conservées, nouvelles tentatives sur 503) ;
+  - `DemoClient` : 8 questions du scénario de soutenance, avec de vrais outils ;
+  - `LLMError` : messages en français et bascule en mode démo.
+- **`churn.assistant.tools`** : 8 outils (`get_kpis`, `get_customer`, `explain_customer`, `list_at_risk`, `segment_stats`, `global_drivers`, `simulate_campaign`, `explain_method`) avec schémas pydantic ; variables sensibles filtrées ; textes de méthode rédigés par nous.
+- **`churn.assistant.prompts`** : prompt système et consignes des textes dédiés.
+- **`churn.assistant.agent`** :
+  - boucle limitée à 5 outils, historique de 10 messages, événements SSE, traces des outils (nom, arguments, durée) ;
+  - explication conseiller, SMS et email, résumé exécutif mis en cache ;
+  - statut du fournisseur.
+- **`churn.assistant.guardrails`** : lecture des nombres au format français, contrôle de chaque nombre contre les résultats d'outils, détection des termes sensibles.
+- **API** : `POST /api/chat` (SSE), `POST /api/customers/{id}/explain-ai`, `POST /api/customers/{id}/retention-message`, `GET /api/summary`, `GET /api/assistant/status` ; CORS étendu à POST.
+- **Évaluation** : `docs/assistant_eval.md` (15 questions), `scripts/eval_assistant.py` (Gemini ou `--demo`).
+- **Tests** : `tests/test_assistant.py` (25 tests, aucun appel à Gemini).
+
+**Fichiers** :
+- Créés : `src/churn/assistant/{llm_client,tools,prompts,agent,guardrails}.py`, `api/routers/assistant.py`, `scripts/eval_assistant.py`, `tests/test_assistant.py`, `docs/assistant_eval.md`, `reports/assistant_eval_demo.json`
+- Modifiés : `api/{main,schemas,dependencies}.py`, `requirements.txt` (`google-genai==2.25.0`), `docs/decisions.md`
+
+**Résultats clés** :
+- **Essai réel avec Gemini** (`gemini-3.8-flash`), 3 questions :
+  - F2 « Combien de clients High ? » → `get_kpis` : 17 472 clients dans la base, 9 876 en estimation portefeuille, les deux natures nommées ;
+  - F3 « 5 clients les plus à risque ? » → `list_at_risk(limit=5)` : 5 clients avec risque, raison « selon le modèle » et action ;
+  - F6 « Campagne 5 %, succès supposé 30 % » → `simulate_campaign(5, 0,3)` : 308 churners attendus contre 100 au hasard, 92 départs évités et 5 324 $ par mois présentés comme **hypothèses**.
+  - Routage 3/3. Fidélité des chiffres 2/3 mesurée : « 100 000 » était absent de l'outil ; corrigé, 3/3 une fois rejoué.
+- **Quota Gemini** : 20 requêtes par jour et par modèle (niveau gratuit), épuisé après ces essais. Les 12 autres questions n'ont pas pu être évaluées avec Gemini (erreurs 429 ; une erreur 503 sur F1).
+- **Mode démonstration**, 15 questions : routage **15/15**, fidélité des chiffres **15/15**. Refus hors périmètre et sensibles corrects ; pièges « départs évités » et « revenu préservé » traités par la formule et le 51 pour 1 000, sans chiffre inventé.
+- **En direct** (`make api`) : Gemini renvoie 429 → événement `error` récupérable → réponse en mode démo avec son outil. Le résumé exécutif est servi en 0,43 s.
+- **Sécurité** : aucune clé API trouvée dans le dépôt, les journaux ou les fichiers temporaires (recherche du motif des clés Google).
+- **Tests** : 145 passed ; ruff : OK.
+
+**Décisions et justification** : D96 à D100 dans `docs/decisions.md`.
+
+**À savoir défendre à l'oral** :
+- *Comment garantir que l'assistant n'invente pas de chiffres ?* Trois niveaux :
+  - il n'a accès qu'aux outils, et ceux-ci renvoient les chiffres des artefacts ;
+  - le prompt lui interdit tout autre chiffre ;
+  - un garde-fou vérifie après coup chaque nombre de la réponse contre les résultats d'outils et affiche un avertissement en cas d'écart. Il a d'ailleurs repéré un vrai trou lors de l'essai réel (F6).
+- *Pourquoi une boucle écrite à la main plutôt que LangChain ?* Elle tient en une centaine de lignes, se teste avec un faux LLM (limite de 5 outils, historique, bascule), et chaque étape est visible dans le flux SSE.
+- *Que se passe-t-il si Gemini tombe pendant la soutenance ?* L'agent affiche un message clair et bascule en mode démonstration. Celui-ci répond aux questions du scénario avec les mêmes outils et les mêmes chiffres, sans réseau.
+
+**Limites / points ouverts** :
+- **Quota gratuit de 20 requêtes par jour** : une démonstration en direct de 6 à 8 questions l'épuise. Avant la soutenance, il faut soit un quota plus large (clé facturée), soit assumer le mode démo en secours (déjà automatique). **Décision à prendre par l'utilisateur.**
+- Évaluation Gemini partielle (3 questions sur 15) : à relancer avec `python scripts/eval_assistant.py` après la remise à zéro du quota.
+- Latence de Gemini de 13 à 35 s par question le 30/09, à cause des surcharges et nouvelles tentatives ; le streaming des jetons en atténue l'effet dans l'interface.
+- Le mode démo ne reconnaît que des formulations proches des questions du scénario ; hors de ces formulations, il répond « hors périmètre ».
+- Les garde-fous contrôlent les nombres et les termes sensibles, pas le sens des phrases : une formulation causale (« à cause de ») resterait possible. Le prompt l'interdit, sans contrôle automatique.
+- Les étapes E14 et E15 (frontend) ne sont pas encore faites : l'API de l'assistant est prête pour elles et pour E17.
+
+**Étape suivante** : E17 — interface de chat (frontend) sur `POST /api/chat` en SSE, avec affichage des outils appelés et des avertissements. E14 et E15 (squelette et pages du frontend) restent à faire.

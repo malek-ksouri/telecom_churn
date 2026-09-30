@@ -14,7 +14,17 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from api.routers import campaign, customers, drivers, filters, health, kpis, risk, segments
+from api.routers import (
+    assistant,
+    campaign,
+    customers,
+    drivers,
+    filters,
+    health,
+    kpis,
+    risk,
+    segments,
+)
 from churn.logging_setup import setup_logging
 from churn.services import CustomerNotFoundError, get_store
 
@@ -37,6 +47,10 @@ API du tableau de bord de rétention (prédiction du churn télécom).
 sont saisis par l'utilisateur dans le simulateur (jamais inventés). Les explications SHAP
 décrivent le modèle, pas des causes.
 
+**Assistant IA** : `POST /api/chat` (streaming SSE), explications et messages pour les
+conseillers, résumé exécutif ; chiffres issus des outils uniquement, contrôlés par des
+garde-fous. Fournisseur : `GET /api/assistant/status`.
+
 **Filtres** : paramètres de requête répétables (`?risk_level=High&risk_level=Medium`) ; valeurs
 possibles sur `GET /api/filters`.
 """
@@ -53,10 +67,11 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Telecom Churn API", version="1.0.0", description=DESCRIPTION,
               lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=FRONTEND_ORIGINS, allow_methods=["GET"],
+app.add_middleware(CORSMiddleware, allow_origins=FRONTEND_ORIGINS, allow_methods=["GET", "POST"],
                    allow_headers=["*"])
 
-for module in (health, kpis, filters, risk, segments, drivers, campaign, customers):
+for module in (health, kpis, filters, risk, segments, drivers, campaign, customers,
+               assistant):
     app.include_router(module.router, prefix=API_PREFIX)
 
 

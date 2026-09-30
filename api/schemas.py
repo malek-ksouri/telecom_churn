@@ -416,3 +416,78 @@ class CustomerExplanation(Schema):
 
 class ErrorResponse(BaseModel):
     detail: str = Field(examples=["Client 123 introuvable"])
+
+
+# --- Assistant IA (E16) ----------------------------------------------------------------------
+
+class ChatTurn(BaseModel):
+    """Message d'historique (seuls les 10 derniers sont transmis au modèle)."""
+
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=8000)
+
+
+class ChatRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=2000, description="Question de l'utilisateur.",
+                         examples=["Quelle est la situation globale du portefeuille ?"])
+    history: list[ChatTurn] = Field(default_factory=list, description="Historique (10 derniers "
+                                                                      "messages conservés).")
+
+
+class ToolCallRecord(Schema):
+    name: str
+    args: dict
+    duration_ms: float
+    ok: bool
+
+
+class ChatAnswer(Schema):
+    """Contenu de l'événement SSE `done`."""
+
+    answer: str
+    tool_calls: list[ToolCallRecord]
+    warnings: list[str]
+    provider: str
+    model: str
+
+
+class AdvisorExplanation(Schema):
+    customer_id: int
+    text: str = Field(description="Explication en 3 à 4 phrases pour un conseiller.")
+    warnings: list[str]
+    provider: str
+    model: str
+
+
+class RetentionMessage(Schema):
+    customer_id: int
+    dominant_family: str | None
+    action: str
+    sms: str = Field(description="SMS de 300 caractères au plus.")
+    sms_length: int
+    email_subject: str
+    email_body: str
+    warnings: list[str]
+    provider: str
+    model: str
+
+
+class ExecutiveSummary(Schema):
+    title: str
+    bullets: list[str] = Field(description="4 à 5 puces « Ce qu'il faut retenir ».")
+    warnings: list[str]
+    provider: str
+    model: str
+    generated_at: str
+    cached: bool
+
+
+class AssistantStatus(Schema):
+    provider: Literal["gemini", "demo"]
+    model: str
+    available: bool
+    live_llm: bool = Field(description="Vrai si un vrai modèle de langage répond.")
+    demo_reason: str | None = Field(description="Pourquoi le mode démonstration est actif.")
+    last_error: str | None = Field(description="Dernière erreur du fournisseur (type).")
+    max_tool_calls: int
+    max_history_messages: int

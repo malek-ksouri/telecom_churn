@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Annotated
 
 from fastapi import Query
 
+from churn.assistant.agent import default_client
+from churn.assistant.llm_client import LLMClient
 from churn.services import Filters
 
 _HELP = "Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU)."
@@ -31,3 +34,17 @@ def get_filters(
     return Filters(risk_level=_values(risk_level), cluster=_values(cluster), area=_values(area),
                    tenure_band=_values(tenure_band), handset_age_band=_values(handset_age_band),
                    usage_band=_values(usage_band), action=_values(action))
+
+
+@dataclass(frozen=True)
+class AssistantClient:
+    """Client LLM de l'assistant et raison d'un éventuel mode démonstration."""
+
+    client: LLMClient
+    demo_reason: str | None
+
+
+def get_assistant_client() -> AssistantClient:
+    """Client configuré par ``.env`` (remplaçable dans les tests par ``dependency_overrides``)."""
+    client, reason = default_client()
+    return AssistantClient(client, reason)
