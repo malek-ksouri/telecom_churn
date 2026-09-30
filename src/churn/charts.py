@@ -594,3 +594,103 @@ def probability_distribution_chart(probas: dict[str, np.ndarray], title: str,
     fig.update_xaxes(type="log", title_text="probabilité de churn corrigée (échelle log)")
     fig.update_layout(title=title, yaxis_title="part des clients (%)", height=460)
     return fig
+
+
+def horizontal_bar_chart(values: pd.Series, title: str, x_title: str,
+                         error: pd.Series | None = None, fmt: str = ".3f") -> go.Figure:
+    """Barres horizontales triées (valeur la plus forte en haut), étiquetées, erreur optionnelle."""
+    v = values.iloc[::-1]
+    err = None if error is None else {"type": "data", "array": error.reindex(v.index),
+                                      "color": INK_SECONDARY, "thickness": 1.2, "width": 3}
+    fig = go.Figure(go.Bar(
+        x=v.to_numpy(), y=list(v.index), orientation="h", marker_color=ACCENT, error_x=err,
+        text=[f"{x:{fmt}}" for x in v], textposition="outside", cliponaxis=False,
+        hovertemplate="%{y}<br>%{x:" + fmt + "}<extra></extra>"))
+    fig.update_layout(title=title, xaxis_title=x_title, height=26 * len(v) + 170,
+                      xaxis_range=[min(0, float(v.min()) * 1.3), float(v.max()) * 1.3])
+    fig.update_yaxes(type="category")
+    return fig
+
+
+def beeswarm_chart(shap_values: pd.DataFrame, features: pd.DataFrame, columns: list[str],
+                   labels: dict[str, str], title: str, seed: int = 42) -> go.Figure:
+    """Nuage SHAP par variable : un point par client, couleur = rang de la valeur (bas -> haut).
+
+    Palette divergente bleu (valeurs basses) / gris / rouge (valeurs hautes) ; clients sans
+    valeur (NaN ou catégorielle) en gris neutre.
+    """
+    rng = np.random.default_rng(seed)
+    fig = go.Figure()
+    for i, col in enumerate(columns[::-1]):
+        x = shap_values[col].to_numpy()
+        raw = features[col]
+        if pd.api.types.is_numeric_dtype(raw):
+            rank = raw.rank(pct=True).to_numpy()
+        else:
+            rank = np.full(len(raw), np.nan)
+        y = i + rng.uniform(-0.3, 0.3, len(x))
+        known = ~np.isnan(rank)
+        fig.add_trace(go.Scattergl(x=x[~known], y=y[~known], mode="markers", showlegend=False,
+                                   marker={"size": 3, "color": GRID}, hoverinfo="skip"))
+        fig.add_trace(go.Scattergl(
+            x=x[known], y=y[known], mode="markers", showlegend=False,
+            marker={"size": 3, "color": rank[known], "colorscale": DIVERGING, "cmin": 0, "cmax": 1,
+                    "showscale": i == len(columns) - 1,
+                    "colorbar": {"title": {"text": "valeur (rang)"}, "tickvals": [0, 1],
+                                 "ticktext": ["basse", "haute"], "thickness": 12}},
+            hoverinfo="skip"))
+    fig.add_vline(x=0, line_color=INK_SECONDARY, line_width=1)
+    fig.update_yaxes(tickvals=list(range(len(columns))),
+                     ticktext=[labels.get(c, c) for c in columns[::-1]], showgrid=False)
+    fig.update_layout(title=title, height=30 * len(columns) + 180,
+                      xaxis_title="contribution SHAP (log-odds ; > 0 : plus de risque)")
+    return fig
+
+
+def dependence_grid(shap_values: pd.DataFrame, features: pd.DataFrame, columns: list[str],
+                    labels: dict[str, str], title: str, cols: int = 3) -> go.Figure:
+    """Dependence plots : contribution SHAP en fonction de la valeur de la variable."""
+    n_rows, n_cols = _grid(len(columns), cols)
+    titles = [labels.get(c, c) for c in columns]
+    fig = make_subplots(rows=n_rows, cols=n_cols, subplot_titles=titles,
+                        horizontal_spacing=0.08, vertical_spacing=_vspace(n_rows) + 0.06)
+    for i, col in enumerate(columns):
+        row, c = divmod(i, n_cols)
+        x = features[col]
+        x = x.astype(str) if not pd.api.types.is_numeric_dtype(x) else x
+        fig.add_trace(go.Scattergl(x=x, y=shap_values[col], mode="markers", showlegend=False,
+                                   marker={"size": 3, "color": ACCENT, "opacity": 0.35},
+                                   hovertemplate=f"{col} = %{{x}}<br>SHAP %{{y:+.3f}}"
+                                                 "<extra></extra>"),
+                      row=row + 1, col=c + 1)
+        fig.add_hline(y=0, line_color=INK_SECONDARY, line_width=1, row=row + 1, col=c + 1)
+    fig.update_yaxes(title_text="SHAP (log-odds)", col=1)
+    fig.update_annotations(font_size=11, font_color=INK_SECONDARY)
+    fig.update_layout(title=title, height=330 * n_rows + 120)
+    return fig
+
+
+def waterfall_chart(contributions: pd.Series, base_value: float, title: str,
+                    top: int = 8) -> go.Figure:
+    """Cascade SHAP d'un client : de la valeur de base au log-odds du client.
+
+    Rouge = augmente le risque, bleu = le réduit ; les autres variables sont regroupées.
+    """
+    order = contributions.abs().sort_values(ascending=False).index
+    shown = contributions[order[:top]]
+    rest = contributions[order[top:]].sum()
+    names = [*shown.index, "autres variables"]
+    values = [*shown.to_numpy(), rest]
+    fig = go.Figure(go.Waterfall(
+        orientation="h", y=["valeur de base", *names, "log-odds du client"],
+        x=[base_value, *values, 0], measure=["absolute", *["relative"] * len(values), "total"],
+        increasing={"marker": {"color": DIVERGING[-1][1]}},
+        decreasing={"marker": {"color": DIVERGING[0][1]}},
+        totals={"marker": {"color": INK_SECONDARY}},
+        text=[f"{base_value:+.2f}", *[f"{v:+.3f}" for v in values],
+              f"{base_value + sum(values):+.2f}"],
+        textposition="outside", connector={"line": {"color": GRID}}))
+    fig.update_layout(title=title, height=32 * (len(names) + 2) + 170,
+                      xaxis_title="log-odds (échelle du modèle brut)")
+    fig.update_yaxes(autorange="reversed", type="category")
+    return fig

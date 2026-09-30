@@ -637,3 +637,39 @@ Pour la suite, les réglages d'hyperparamètres seront lancés en arrière-plan,
 - Notebook 06, 2e partie : deux sessions (CV, puis test) assemblées, pour que D76 précède réellement la lecture du test.
 
 **Étape suivante** : E11 — Explicabilité SHAP (globale et par client, codes de raisons), sur le modèle final.
+
+## Bilan — Étape 11 : Explicabilité du LightGBM final
+
+**Fait** :
+- `churn.explain.shap_utils` : `ShapExplainer` (`TreeExplainer`, log-odds), regroupement des features dérivées sur leur variable d'origine, libellés français, importance globale
+- `churn.explain.reason_codes` : top 3 des facteurs d'un client en phrases métier, avec leur sens (augmente / réduit le risque)
+- `notebooks/07_explainability.ipynb` : importance par permutation (fold de validation), importance SHAP, beeswarm, dependence plots (top 5, puis ancienneté et âge du terminal regroupés), 3 clients (High, Medium, Low) avec cascade et codes de raisons, confrontation avec E4 et E5
+- Tests `tests/test_explain.py` (4 tests : additivité, regroupement, tri et sens des raisons, phrases)
+
+**Fichiers** :
+- Créés : `src/churn/explain/{shap_utils,reason_codes}.py`, `notebooks/07_explainability.ipynb`, `tests/test_explain.py`, `reports/figures/07_*.png` (8)
+- Modifiés : `src/churn/charts.py` (barres, beeswarm, dependence plots, cascade), `docs/decisions.md`
+
+**Résultats clés** :
+- Importance par permutation (baisse d'AUC, fold de validation) : ancienneté 37,7 ; âge du terminal 34,5 ; évolution de l'usage 29,0 ; usage récent 17,7 ; minutes d'appel 13,5 millièmes
+- Importance SHAP (variables d'origine) : **âge du terminal 12,2 %**, évolution de l'usage 7,4 %, ancienneté 7,3 %, minutes d'appel 4,7 %, usage récent 4,5 % ; aucune variable au-delà de 13 %
+- Formes retrouvées : ancienneté −0,31 (6-9 mois) → **+0,51 (11 mois)**, +0,49 (12 mois) → ≈ 0 ensuite ; âge du terminal −0,31 jusqu'à 299 jours → +0,05 (300-309) → **+0,22 (310-330)** → plateau ≈ +0,20
+- `change_mou` : 3,6 % seulement de son importance vient des NaN « déjà parti » ; forte baisse d'usage +0,44, hausse −0,17
+- 3 clients : High (97,5e centile, 8,6 % par mois au taux réel supposé ; premier facteur : 0 minute d'appel, +0,68), Medium (2,0 %), Low (0,4 % ; 8 mois d'ancienneté −0,41, terminal de 8 mois −0,38 ; a pourtant churné)
+- Surprises (rang E5 → rang SHAP) : appels coupés 103 → 11, durée de résidence 44 → 9, région 39 → 10, classe de crédit 23 → 6
+- Tests : 91 passed ; ruff : OK
+
+**Décisions et justification** : D80 à D82 dans `docs/decisions.md`.
+
+**À savoir défendre à l'oral** :
+- *Que dit une valeur SHAP ?* De combien la caractéristique d'un client déplace son score (en log-odds) par rapport au score moyen, **selon le modèle**. Les contributions s'additionnent exactement jusqu'au score du client. Ce n'est pas une cause : agir sur la variable ne garantit pas de changer le risque.
+- *Pourquoi les appels coupés sont-ils importants dans le modèle mais pas en E5 ?* Seuls, ils vont avec les gros utilisateurs, qui churnent moins ; à usage égal, plus d'appels coupés va avec plus de churn. Le modèle voit cet effet conditionnel, pas un test univarié.
+- *Le modèle a-t-il retrouvé ce que l'EDA montrait ?* Oui : pic de risque à 11-12 mois d'ancienneté et marche vers 300-310 jours d'âge du terminal, sans qu'on lui fournisse ces seuils sous forme de règle (il dispose aussi des variables brutes).
+
+**Limites / points ouverts** :
+- SHAP décrit des **associations apprises**, pas des causes ; les codes de raisons ne sont pas des leviers garantis.
+- Valeurs SHAP sur l'échelle log-odds du modèle brut ; les probabilités affichées aux utilisateurs sont calibrées et ramenées au taux réel supposé : les deux ne se lisent pas sur la même échelle.
+- Le client High a pour premier facteur un usage nul (0 minute) : cas proche des clients « déjà partis », à traiter dans la politique de campagne (E12), car peut-être déjà perdu.
+- Variables corrélées (`hnd_price`, `eqpdays`, `phones`) : l'importance se partage entre elles, leur rang individuel est à lire avec prudence.
+
+**Étape suivante** : E12 — Scoring métier et artefacts (niveaux de risque selon la capacité de campagne, actions suggérées, `artifacts/scores.parquet`, `shap.parquet`, `kpis.json`), avec un taux de succès de l'offre présenté comme hypothèse (D79).
