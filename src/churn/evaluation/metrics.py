@@ -84,3 +84,67 @@ def evaluate_on_folds(pipeline, X: pd.DataFrame, y: pd.Series, folds) -> dict[st
 
     result = cross_validate_model(pipeline, X, y, folds)
     return {"par_fold": result.per_fold, "resume": summarize_folds(result.per_fold)}
+
+
+def bootstrap_auc_ci(y: np.ndarray, score: np.ndarray, n_boot: int = 1000,
+                     alpha: float = 0.05, random_state: int = 42) -> dict[str, float]:
+    """AUC et intervalle de confiance percentile par bootstrap (rééchantillonnage des clients)."""
+    y, score = np.asarray(y), np.asarray(score)
+    rng = np.random.default_rng(random_state)
+    n = len(y)
+    stats = []
+    for _ in range(n_boot):
+        idx = rng.integers(0, n, n)
+        if y[idx].min() == y[idx].max():
+            continue
+        stats.append(roc_auc_score(y[idx], score[idx]))
+    low, high = np.quantile(stats, [alpha / 2, 1 - alpha / 2])
+    return {"auc": roc_auc(y, score), "ic_bas": float(low), "ic_haut": float(high),
+            "erreur_type": float(np.std(stats, ddof=1))}
+
+
+def bootstrap_auc_difference(y: np.ndarray, score_a: np.ndarray, score_b: np.ndarray,
+                             n_boot: int = 1000, alpha: float = 0.05,
+                             random_state: int = 42) -> dict[str, float]:
+    """Différence d'AUC A - B, appariée (mêmes clients rééchantillonnés pour les deux modèles)."""
+    y, a, b = np.asarray(y), np.asarray(score_a), np.asarray(score_b)
+    rng = np.random.default_rng(random_state)
+    n = len(y)
+    diffs = []
+    for _ in range(n_boot):
+        idx = rng.integers(0, n, n)
+        if y[idx].min() == y[idx].max():
+            continue
+        diffs.append(roc_auc_score(y[idx], a[idx]) - roc_auc_score(y[idx], b[idx]))
+    low, high = np.quantile(diffs, [alpha / 2, 1 - alpha / 2])
+    return {"difference": roc_auc(y, a) - roc_auc(y, b), "ic_bas": float(low),
+            "ic_haut": float(high), "part_positive": float(np.mean(np.array(diffs) > 0))}
+
+
+def gain_curve(y: np.ndarray, score: np.ndarray, points: int = 100) -> pd.DataFrame:
+    """Gain cumulé et lift quand on cible les clients par score décroissant.
+
+    ``gain`` : part (%) des churners captés en ciblant ``part_ciblee`` % des clients ;
+    ``lift`` : taux de churn des ciblés / taux de base.
+    """
+    y = np.asarray(y)[np.argsort(-np.asarray(score), kind="stable")]
+    cum = np.cumsum(y)
+    n, total = len(y), y.sum()
+    shares = np.linspace(1, 100, points)
+    k = np.maximum(1, np.round(shares / 100 * n).astype(int))
+    gain = 100 * cum[k - 1] / total
+    lift = (cum[k - 1] / k) / (total / n)
+    return pd.DataFrame({"part_ciblee": shares, "gain": gain, "lift": lift})
+
+
+def confusion_at_top_k(y: np.ndarray, score: np.ndarray, k: float = 0.10) -> pd.DataFrame:
+    """Matrice de confusion quand on cible les k % de clients au score le plus élevé."""
+    y = np.asarray(y)
+    targeted = np.zeros(len(y), dtype=bool)
+    targeted[_top_k(score, k)] = True
+    return pd.DataFrame(
+        [[int((targeted & (y == 1)).sum()), int((~targeted & (y == 1)).sum())],
+         [int((targeted & (y == 0)).sum()), int((~targeted & (y == 0)).sum())]],
+        index=["churner réel", "non-churner réel"],
+        columns=[f"ciblé (top {round(100 * k)} %)", "non ciblé"],
+    )

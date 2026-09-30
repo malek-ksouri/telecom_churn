@@ -541,3 +541,49 @@ Pour la suite, les réglages d'hyperparamètres seront lancés en arrière-plan,
 
 5. **Comment une variable peut-elle être importante avec une corrélation quasi nulle ?**
    La corrélation, même de rang, mesure une tendance monotone. `months` a un pic de churn à 11-12 mois : les deux côtés du pic se compensent, et la corrélation vaut 0,05. L'écart entre déciles (28,7 points) et l'information mutuelle, qui n'est nulle qu'en cas d'indépendance, révèlent cet effet.
+
+## Bilan — Étape 9 : Optimisation, sélection et évaluation finale
+
+**Fait** :
+- `churn.models.tune` : réglage de LightGBM par Optuna (50 essais, TPE graine 42, pruning médian) sur les folds figés de E6, sans arrêt précoce sur le fold de validation ; historique `reports/optuna_lightgbm_trials.csv`
+- Paramètres réglés et modèle final inscrits dans `configs/config.yaml` (section `models`, écriture ciblée qui conserve les commentaires) ; `build_pipeline` les applique par défaut
+- Sélection sur la CV par une règle écrite avant les résultats, décision inscrite (D72, D73) **avant** la lecture du test
+- Évaluation finale unique sur le test : AUC avec IC bootstrap (1 000 rééchantillonnages), différences appariées, PR-AUC, Brier, Precision / Recall / lift à 5-10-20 %, gain cumulé et lift, matrice de confusion au top 10 %, AUC clients actifs, comparaison CV / test ; `reports/final_metrics.json`
+- `scripts/train.py` (`make train`) → `models/pipeline.joblib` ; `churn.models.model_card` → `models/model_card.md`
+- `notebooks/06_evaluation_calibration.ipynb` (1re partie) ; tests `tests/test_e9.py` (4 tests)
+
+**Fichiers** :
+- Créés : `src/churn/models/{tune,model_card}.py`, `scripts/train.py`, `notebooks/06_evaluation_calibration.ipynb`, `tests/test_e9.py`, `models/pipeline.joblib`, `models/model_card.md`, `reports/{optuna_lightgbm_trials.csv,selection_grid_cv.csv,final_metrics.json}`, `reports/figures/06_*.png` (3)
+- Modifiés : `configs/config.yaml` (section `models`), `src/churn/config.py` (`ModelsConfig`, `write_model_params`, `write_final_model`), `src/churn/models/factory.py` (paramètres lus dans la config), `src/churn/evaluation/metrics.py` (bootstrap, gain, confusion), `src/churn/charts.py`, `docs/decisions.md`
+
+**Résultats clés** :
+- Réglage : 42 essais complets, 8 élagués ; meilleure AUC 0,6973 ± 0,0040 (essai 40) mais écart train-validation 0,112 ; **retenu : essai 7**, AUC 0,6942 ± 0,0042, écart **0,0545** (défaut : 0,077), la moins surapprise des 35 configurations à moins d'un écart-type
+- Grille (CV) : LightGBM 0,694 / LR 0,668 ; gain **+26,5 ± 3,1 millièmes, 5/5 folds** → **LightGBM** (D73)
+- **Test (officiel)** : AUC **0,6955 [0,6881 ; 0,7024]**, PR-AUC 0,683, Brier 0,221, AUC clients actifs 0,693
+
+| k | Precision@k | Recall@k | lift@k |
+|---|---|---|---|
+| 5 % | 83,3 % | 8,4 % | 1,68 |
+| 10 % | 79,2 % | 16,0 % | 1,60 |
+| 20 % | 73,6 % | 29,7 % | 1,48 |
+
+- Pour information (test) : LR 0,6686 [0,6610 ; 0,6760], règles 0,6174 ; LightGBM − LR **+26,9 millièmes [+23,0 ; +31,0]**, positif dans 100 % des rééchantillonnages
+- Top 10 % : 2 000 clients ciblés, 1 584 churners (79,2 %), 16,0 % des 9 912 churners atteints
+- CV / test : **+1,3 millième** (LightGBM), +0,9 (LR) ; lift@10 % 1,57 → 1,60 ; Brier 0,221 → 0,221
+- Tests : 81 passed ; ruff : OK
+
+**Décisions et justification** : D72 à D75 dans `docs/decisions.md`.
+
+**À savoir défendre à l'oral** :
+- *Comment garantir que le test n'a pas influencé le choix ?* La règle de sélection a été écrite avant d'évaluer le modèle réglé ; la décision a été inscrite dans `decisions.md` et la config (16 h 35) avant l'exécution de la section qui lit le test ; le code refuse de lire le test tant que `models.final` n'est pas fixé ; la LR et les règles ne sont évaluées qu'à titre d'information.
+- *Pourquoi ne pas avoir pris l'essai à la meilleure AUC ?* Les 35 meilleurs essais sont indiscernables (moins d'un écart-type). Parmi eux, l'essai 7 surapprend deux fois moins (0,055 contre 0,112) pour 3 millièmes d'AUC en moins : un modèle moins surappris est plus robuste face à de nouvelles données. Sur le test, il fait 0,6955, au-dessus même de sa CV.
+- *Pourquoi le test est-il si proche de la CV ?* Le train et le test viennent du même échantillon, découpé aléatoirement et de façon stratifiée, et les sources d'optimisme (réglage, seuils d'EDA) étaient faibles : surface de réglage plate, seuils fixés sur 80 000 clients. L'écart de +1,3 millième est sous l'erreur-type du test (3,6).
+
+**Limites / points ouverts** :
+- Probabilités non calibrées, issues d'un échantillon équilibré : Brier et Precision@k ne valent que pour cet échantillon (E10).
+- Choix de l'essai 7 fait **après** avoir vu les essais (règle D62 appliquée au réglage), mais avant le test.
+- Figure de gain cumulé : titre « environ 28 % » pour une valeur exacte de 29,7 % ; figures de gain et de lift enregistrées en PNG, non rendues en interactif dans le notebook (la régénération aurait demandé de relire le test).
+- Pas de validation temporelle : la concordance CV / test ne dit rien de la stabilité dans le temps.
+- Le notebook 06 a été exécuté en trois sessions (réglage, choix de l'essai, test), assemblées ensuite, pour que la décision précède réellement la lecture du test.
+
+**Étape suivante** : E10 — Calibration (en CV) et correction du prior vers le taux réel mensuel (2 %, sensibilité 1-3 %, D47).

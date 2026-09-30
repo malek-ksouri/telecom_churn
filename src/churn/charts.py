@@ -516,3 +516,40 @@ def model_comparison_chart(table: pd.DataFrame, title: str, reference: str | Non
                       height=52 * len(t) + 180)
     fig.update_yaxes(type="category")
     return fig
+
+
+def tuning_history_chart(trials: pd.DataFrame, title: str) -> go.Figure:
+    """AUC de chaque essai Optuna, meilleure AUC cumulée (ligne) ; essais élagués évidés."""
+    fig = go.Figure()
+    done = trials[trials["state"] == "COMPLETE"]
+    pruned = trials[trials["state"] == "PRUNED"]
+    fig.add_trace(go.Scatter(x=pruned["number"], y=pruned["auc_cv"], mode="markers",
+                             name="essai élagué (AUC partielle)",
+                             marker={"size": 7, "color": INK_SECONDARY, "symbol": "circle-open"}))
+    fig.add_trace(go.Scatter(x=done["number"], y=done["auc_cv"], mode="markers",
+                             name="essai complet", marker={"size": 8, "color": ACCENT}))
+    best = done.set_index("number")["auc_cv"].cummax()
+    fig.add_trace(go.Scatter(x=best.index, y=best.to_numpy(), mode="lines", name="meilleure AUC",
+                             line={"color": ACCENT, "width": 2, "shape": "hv"}))
+    fig.update_layout(title=title, xaxis_title="numéro d'essai", yaxis_title="AUC moyenne (CV)",
+                      height=460)
+    return fig
+
+
+def cumulative_gain_chart(curves: dict[str, pd.DataFrame], title: str,
+                          value: str = "gain", y_title: str = "part des churners captés (%)"
+                          ) -> go.Figure:
+    """Courbes de gain cumulé (ou de lift) : une ligne par modèle, hasard en pointillés."""
+    colors = [NO_CHURN, CHURN, "#1baf7a"]
+    fig = go.Figure()
+    for i, (name, c) in enumerate(curves.items()):
+        fig.add_trace(go.Scatter(x=c["part_ciblee"], y=c[value], mode="lines", name=name,
+                                 line={"color": colors[i % 3], "width": 2},
+                                 hovertemplate=f"{name}<br>%{{x:.0f}} % ciblés : %{{y:.2f}}"
+                                               "<extra></extra>"))
+    ref = [0, 100] if value == "gain" else [1, 1]
+    fig.add_trace(go.Scatter(x=[0, 100], y=ref, mode="lines", name="hasard",
+                             line={"color": INK_SECONDARY, "width": 1, "dash": "dash"}))
+    fig.update_layout(title=title, xaxis_title="part des clients ciblés, du plus risqué (%)",
+                      yaxis_title=y_title, height=460)
+    return fig

@@ -52,7 +52,6 @@ MODEL_NAMES: tuple[str, ...] = BASELINES + LINEAR_MODELS + TREE_MODELS
 # à but pédagogique) ; arbre et forêt : feuilles d'au moins 100 / 50 clients pour limiter le
 # surapprentissage sur un signal faible.
 DEFAULT_PARAMS: dict[str, dict[str, Any]] = {
-    "logreg": {"C": 0.01, "l1_ratio": 0.0, "dedupe_missing": True},   # finaliste E8 (D69)
     "decision_tree": {"max_depth": 5, "min_samples_leaf": 100},
     "random_forest": {"n_estimators": 300, "min_samples_leaf": 50, "max_features": "sqrt"},
     "lightgbm": {},
@@ -145,7 +144,9 @@ def build_pipeline(model_name: str, groups: Sequence[str] | None = None,
     cfg = get_config()
     seed = cfg.random_state
     groups = cfg.features.groups if groups is None else list(groups)
-    merged = {**DEFAULT_PARAMS.get(model_name, {}), **params}
+    # Priorité : paramètres passés > paramètres réglés de la config (E7, E9) > défauts.
+    merged = {**DEFAULT_PARAMS.get(model_name, {}),
+              **cfg.models.params.get(model_name, {}), **params}
     features = FeatureBuilder(groups, drop_columns=non_feature_columns())
 
     if model_name == "dummy":

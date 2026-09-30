@@ -41,6 +41,29 @@ features:
     - compte_terminal
     - indicateurs_manquants
 
+models:
+  # Modèle final : choisi en E9 sur la CV, AVANT la lecture du test (D73) ; ne change plus ensuite.
+  final: lightgbm
+  params:
+    # Régression logistique améliorée : réglage de E7 (C choisi en CV), sans doublons (D69).
+    logreg:
+      C: 0.01
+      l1_ratio: 0.0
+      dedupe_missing: true
+    # >>> lightgbm (réglé par Optuna en E9, bloc généré par churn.models.tune)
+    lightgbm:
+      num_leaves: 21
+      max_depth: 5
+      min_child_samples: 113
+      learning_rate: 0.015253
+      n_estimators: 850
+      subsample: 0.537275
+      colsample_bytree: 0.992132
+      reg_alpha: 1.22738
+      reg_lambda: 0.006235
+      subsample_freq: 1
+    # <<< lightgbm
+
 business:
   # HYPOTHÈSE : taux de churn réel d'un opérateur, utilisé pour corriger le prior
   # (le dataset est échantillonné à ~50/50, ce qui gonfle les probabilités).

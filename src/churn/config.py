@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
@@ -55,6 +56,13 @@ class FeaturesConfig(BaseModel):
     groups: list[str]
 
 
+class ModelsConfig(BaseModel):
+    """Paramètres réglés par modèle et modèle final retenu (E9)."""
+
+    final: str | None = None
+    params: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
 class Hypothesis(BaseModel):
     """Valeur métier qui n'est pas issue des données et doit être présentée comme telle."""
 
@@ -82,6 +90,7 @@ class Config(BaseModel):
     data: DataConfig
     modeling: ModelingConfig
     features: FeaturesConfig
+    models: ModelsConfig
     business: BusinessConfig
 
     @property
@@ -152,3 +161,35 @@ def load_config(path: Path | None = None) -> Config:
 def get_config() -> Config:
     """Configuration du projet, chargée une seule fois par processus."""
     return load_config()
+
+
+def write_model_params(model: str, params: dict[str, Any], path: Path | None = None) -> None:
+    """Remplace les paramètres réglés d'un modèle dans ``config.yaml``.
+
+    Seul le bloc délimité par ``# >>> <model>`` et ``# <<< <model>`` est réécrit : les
+    commentaires du reste du fichier sont conservés (un aller-retour YAML les perdrait).
+    """
+    path = path or find_project_root() / CONFIG_RELATIVE_PATH
+    text = path.read_text(encoding="utf-8")
+    start, end = f"# >>> {model}", f"# <<< {model}"
+    if start not in text or end not in text:
+        raise ValueError(f"Balises {start!r} / {end!r} absentes de {path}")
+    head, rest = text.split(start, 1)
+    header_line, rest = rest.split("\n", 1)
+    _, tail = rest.split(end, 1)
+    indent = head.rsplit("\n", 1)[-1]
+    body = yaml.safe_dump({model: params}, sort_keys=False, allow_unicode=True)
+    body = "".join(f"{indent}{line}\n" for line in body.splitlines())
+    path.write_text(f"{head}{start}{header_line}\n{body}{indent}{end}{tail}", encoding="utf-8")
+    get_config.cache_clear()
+
+
+def write_final_model(name: str, path: Path | None = None) -> None:
+    """Inscrit le modèle final (ligne ``final:`` de la section ``models``)."""
+    path = path or find_project_root() / CONFIG_RELATIVE_PATH
+    lines = path.read_text(encoding="utf-8").splitlines(keepends=True)
+    idx = next(i for i, line in enumerate(lines) if line.strip().startswith("final:"))
+    indent = lines[idx][: len(lines[idx]) - len(lines[idx].lstrip())]
+    lines[idx] = f"{indent}final: {name}\n"
+    path.write_text("".join(lines), encoding="utf-8")
+    get_config.cache_clear()
