@@ -1,0 +1,28 @@
+/* Surface flottante vitrée : le contenu défile dessous ; flou + saturation, filet de séparation. */
+.header {
+  background: var(--app-glass);
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border-bottom: 1px solid var(--app-glass-border);
+}
+
+@supports not (backdrop-filter: blur(1px)) {
+  .header {
+    background: var(--app-surface);
+  }
+}
+
+.filters {
+  border-top: 1px solid var(--app-glass-border);
+}
+
+.chips {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.chips::-webkit-scrollbar {
+  display: none;
+}

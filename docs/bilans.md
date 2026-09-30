@@ -1041,3 +1041,69 @@ Aucune décision n'a dépendu du test.
 - Les étapes E14 et E15 (frontend) ne sont pas encore faites : l'API de l'assistant est prête pour elles et pour E17.
 
 **Étape suivante** : E17 — interface de chat (frontend) sur `POST /api/chat` en SSE, avec affichage des outils appelés et des avertissements. E14 et E15 (squelette et pages du frontend) restent à faire.
+
+## Bilan — Étape 14 : Squelette du frontend et design system
+
+**Fait** :
+- **Contrainte Gemini appliquée** : `LLM_PROVIDER=demo` dans `.env` (ligne modifiée seule, clé jamais affichée) ; aucun appel Gemini pendant l'étape. L'évaluation complète et le choix du modèle sont prévus jeudi soir.
+- **`frontend/`** :
+  - Vite 8, React 19, TypeScript 5.9 strict ;
+  - Mantine 9, ECharts 6 (import modulaire), AG Grid 36, TanStack Query 5, React Router 7, Zustand 5, Framer Motion 13 ;
+  - Inter servie en local ; ESLint strict ; `openapi-typescript`.
+- **Design system (`src/theme/`)** :
+  - `tokens.ts` : accent, neutres, surfaces clair et sombre, couleurs de risque validées, typographie, espacements multiples de 8, rayons, ombres, durées et courbes ;
+  - thèmes Mantine (variables CSS par thème), ECharts (clair et sombre) et AG Grid (Quartz), construits sur ces tokens.
+- **Données** : types générés (`npm run gen:api`, 44 schémas), client typé, hooks par endpoint, store de filtres synchronisé avec l'URL.
+- **Layout** :
+  - barre latérale Pilotage / Opérations, repliable, avec infobulles ;
+  - en-tête vitré : fil d'Ariane, filtres, puces supprimables, badge d'hypothèse, état de l'assistant, bascule de thème ;
+  - transitions de page.
+- **Composants** : `KpiCard` (compteur animé, nature de l'effectif, définition), `ChartCard` (titre-conclusion, squelette, vide, erreur), `EChart`, `RiskBadge`, `HypothesisBadge`, `ActiveFilterChips`, `FilterMenu`, `PageHeader`, `EmptyState`, `ErrorState` (bouton Réessayer), `SkeletonKpiRow`, `SummaryCard`.
+- **Page Vue d'ensemble** (données réelles de `/api/kpis` et `/api/summary`) :
+  - 6 KPI ;
+  - graphique de concentration par niveau ;
+  - répartition base / portefeuille ;
+  - résumé « Ce qu'il faut retenir ».
+- **Lancement** :
+  - `npm run dev:all` ou `make dev` : API et front ensemble (concurrently) ;
+  - `npm run api` (Python du venv, Windows ou Linux) ;
+  - `frontend/scripts/screenshots.py` : captures Playwright via le Chrome installé.
+
+**Fichiers** :
+- Créés :
+  - configuration : `frontend/{package.json,vite.config.ts,tsconfig*.json,eslint.config.js,postcss.config.cjs,index.html,.gitignore}` ;
+  - `frontend/src/{theme,api,store,lib,components,layout,pages,styles}/` ;
+  - `frontend/scripts/{run-api.mjs,screenshots.py}`.
+- Modifiés : `.env` (`LLM_PROVIDER=demo`), `Makefile` (cible `dev`), `requirements.txt` (`playwright`), `docs/decisions.md`.
+
+**Résultats clés** :
+- **Palette de risque** : 2 palettes rejetées par le validateur (feu tricolore : daltonisme 6,0 ; violet clair contre bleu : 0,5), puis une palette retenue, dont tous les contrôles passent dans les deux thèmes.
+- **Captures Playwright** : vue d'ensemble en clair et en sombre, filtres actifs, liste de filtres, états de chargement et d'erreur, barre repliée.
+- **8 défauts repérés et corrigés** :
+  - graphique qui plantait (interopérabilité CommonJS d'`echarts-for-react`) ;
+  - en-tête qui chevauchait le logo ;
+  - libellés tronqués ;
+  - mention de nature trop lourde ;
+  - étiquettes blanches illisibles sur l'ambre ;
+  - rangée déséquilibrée ;
+  - titre faux sous filtre (« 100 % … 100 % ») ;
+  - résumé global présenté comme filtré.
+- **Filtres ↔ URL** (Playwright) : clic → `?risk_level=High` ; Retour → filtre retiré ; lien partagé → filtres restaurés ; navigation → filtres conservés. Aucune erreur JavaScript.
+- **Réessayer** : un 500 simulé affiche l'état d'erreur ; « Réessayer » recharge les données.
+- **Build** : `npm run build` sans erreur TypeScript (2,2 s) ; bundles : ECharts 212 ko gzip, Mantine 74 ko gzip, application 165 ko gzip.
+- **Qualité** : ESLint propre ; ruff OK ; pytest : 145 passed.
+
+**Décisions et justification** : D101 à D105 dans `docs/decisions.md`.
+
+**À savoir défendre à l'oral** :
+- *Pourquoi pas rouge / orange / vert pour les niveaux ?* Environ 8 % des hommes ont une vision des couleurs atypique. Le validateur a mesuré que le vert et l'orange se confondent pour un protanope. Le bleu pour Low reste distinct du rouge pour tout le monde, et le libellé accompagne toujours la couleur.
+- *Comment le front sait-il qu'un chiffre est une estimation ?* Les types viennent de l'API (`n_rows` contre `n_portfolio_equiv`). Chaque carte affiche la nature de son effectif, l'hypothèse de 2 % est rappelée en permanence dans l'en-tête, et chaque KPI a sa définition en infobulle.
+- *Pourquoi l'URL porte-t-elle les filtres ?* Pour partager une vue exacte (« regarde les High en fin d'engagement ») et pour que le bouton Retour fasse ce qu'on attend.
+
+**Limites / points ouverts** :
+- Seule la vue d'ensemble est construite ; les autres pages affichent un état « en construction » (E15, E17).
+- Le thème AG Grid est prêt mais pas encore visible (liste des clients en E15).
+- Bundle principal de 518 ko (165 ko gzip), qui baissera avec le découpage par page (chargement différé des routes) en E15.
+- Pas de version mobile travaillée : l'application cible un écran de bureau (1440 px). En dessous de 768 px, la barre latérale se replie mais la barre de filtres défile horizontalement.
+
+**Étape suivante** : E15 — pages Segments et facteurs, Simulateur, Clients à risque (AG Grid, fiche client) ; puis E17 (chat).

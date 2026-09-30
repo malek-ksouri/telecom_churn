@@ -34,9 +34,10 @@ api:
 front:
 	cd frontend && npm run dev
 
-# Lancer `make api` et `make front` dans deux terminaux séparés.
+# API (port 8000) + frontend (port 5173) dans le même terminal (concurrently) ;
+# Ctrl+C arrête les deux. Premier lancement : cd frontend && npm install
 dev:
-	@echo Terminal 1 : make api   -- Terminal 2 : make front
+	cd frontend && npm run dev:all
 
 test:
 	$(PYTHON) -m pytest -q

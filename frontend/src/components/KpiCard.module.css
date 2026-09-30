@@ -1,0 +1,61 @@
+.card {
+  background: var(--app-surface);
+  border-color: var(--app-border);
+  box-shadow: var(--app-shadow-card);
+  transition: border-color var(--app-transition-fast), box-shadow var(--app-transition-fast);
+  height: 100%;
+}
+
+.card:hover {
+  border-color: var(--app-border-strong);
+}
+
+/* KPI principal : filet d'accent à gauche, pas de fond coloré (le chiffre reste sur surface neutre). */
+.card[data-emphasis] {
+  box-shadow: inset 3px 0 0 var(--app-accent), var(--app-shadow-card);
+}
+
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  color: var(--app-accent-text);
+  background: color-mix(in srgb, var(--app-accent) 12%, transparent);
+  flex-shrink: 0;
+}
+
+.info {
+  display: inline-flex;
+  color: var(--app-text-muted);
+  border-radius: 4px;
+  cursor: help;
+}
+
+.info:hover,
+.info:focus-visible {
+  color: var(--app-text);
+  outline: none;
+}
+
+.info:focus-visible {
+  box-shadow: var(--app-focus);
+}
+
+.value {
+  font-size: 30px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--app-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.nature {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 11px;
+  font-weight: 500;
+}

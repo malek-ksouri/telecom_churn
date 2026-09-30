@@ -1,0 +1,26 @@
+// Lance l'API FastAPI avec le Python du venv du projet (Windows ou Linux/macOS).
+// Utilisé par `npm run api` et `npm run dev:all`.
+import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const candidates = [
+  join(root, ".venv", "Scripts", "python.exe"),
+  join(root, ".venv", "bin", "python"),
+];
+const python = candidates.find((p) => existsSync(p));
+if (!python) {
+  console.error("Python du venv introuvable : créer .venv à la racine du projet (voir README).");
+  process.exit(1);
+}
+const child = spawn(
+  python,
+  ["-m", "uvicorn", "api.main:app", "--reload", "--port", "8000"],
+  { cwd: root, stdio: "inherit" },
+);
+child.on("exit", (code) => process.exit(code ?? 0));
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, () => child.kill(signal));
+}

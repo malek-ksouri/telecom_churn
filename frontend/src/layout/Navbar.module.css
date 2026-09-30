@@ -1,0 +1,94 @@
+.root {
+  background: var(--app-surface);
+}
+
+.brand {
+  border-bottom: 1px solid var(--app-border);
+  flex-shrink: 0;
+}
+
+.logo {
+  color: var(--app-accent);
+  display: inline-flex;
+  flex-shrink: 0;
+}
+
+.groupLabel {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--app-text-muted);
+  padding: 0 10px 6px;
+}
+
+.groupRule {
+  height: 1px;
+  background: var(--app-border);
+  margin: 4px 8px 8px;
+}
+
+.link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  height: 38px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--app-text-secondary);
+  font-size: 14px;
+  font-weight: 500;
+  transition: background-color var(--app-transition-fast), color var(--app-transition-fast);
+}
+
+.link[data-collapsed] {
+  justify-content: center;
+  padding: 0;
+}
+
+.link:hover {
+  background: var(--app-raised);
+  color: var(--app-text);
+}
+
+.link:focus-visible {
+  outline: none;
+  box-shadow: var(--app-focus);
+}
+
+/* Page active : fond d'accent discret + filet à gauche (repère de position, pas décoratif). */
+.link:global(.active) {
+  background: color-mix(in srgb, var(--app-accent) 11%, transparent);
+  color: var(--app-accent-text);
+  font-weight: 600;
+}
+
+.link:global(.active)::before {
+  content: "";
+  position: absolute;
+  left: -8px;
+  top: 9px;
+  bottom: 9px;
+  width: 3px;
+  border-radius: 0 3px 3px 0;
+  background: var(--app-accent);
+}
+
+.link[data-collapsed]:global(.active)::before {
+  left: -12px;
+}
+
+.linkIcon {
+  flex-shrink: 0;
+}
+
+.linkLabel {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.footer {
+  border-top: 1px solid var(--app-border);
+}

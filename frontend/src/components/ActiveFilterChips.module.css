@@ -1,0 +1,33 @@
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 4px 0 10px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--app-accent) 35%, var(--app-border));
+  background: color-mix(in srgb, var(--app-accent) 8%, var(--app-surface));
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.key {
+  color: var(--app-text-muted);
+  font-weight: 500;
+}
+
+.value {
+  color: var(--app-text);
+  font-weight: 600;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.close {
+  color: var(--app-text-muted);
+}
+
+.close:hover {
+  color: var(--app-text);
+}
