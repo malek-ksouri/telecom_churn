@@ -82,6 +82,22 @@ def _summary(row: pd.Series) -> dict[str, Any]:
     }
 
 
+def _select(filters: Filters | None, sort: str, order: str, search: str | None) -> np.ndarray:
+    """Positions des clients filtrés (et recherchés), triées ; manquants toujours en fin."""
+    if sort not in SORT_FIELDS:
+        raise ValueError(f"Tri inconnu : {sort} (valeurs : {', '.join(SORT_FIELDS)})")
+    if order not in ("asc", "desc"):
+        raise ValueError("order doit valoir asc ou desc")
+    scores = get_store().scores
+    mask = filter_mask(scores, filters)
+    if search:
+        mask &= scores["id_text"].str.contains(search.strip(), regex=False).to_numpy()
+    positions = np.flatnonzero(mask)
+    values = scores[SORT_FIELDS[sort]].to_numpy(dtype=float)[positions]
+    key = np.where(np.isnan(values), np.inf, -values if order == "desc" else values)
+    return positions[np.argsort(key, kind="stable")]
+
+
 def list_customers(filters: Filters | None = None, sort: str = "p_real", order: str = "desc",
                    page: int = 1, size: int = 25, search: str | None = None) -> dict[str, Any]:
     """Liste paginée côté serveur des clients filtrés.
@@ -97,24 +113,12 @@ def list_customers(filters: Filters | None = None, sort: str = "p_real", order: 
     Raises:
         ValueError: tri, ordre ou pagination invalides.
     """
-    if sort not in SORT_FIELDS:
-        raise ValueError(f"Tri inconnu : {sort} (valeurs : {', '.join(SORT_FIELDS)})")
-    if order not in ("asc", "desc"):
-        raise ValueError("order doit valoir asc ou desc")
     if page < 1 or not 1 <= size <= MAX_PAGE_SIZE:
         raise ValueError(f"page >= 1 et 1 <= size <= {MAX_PAGE_SIZE}")
-    store = get_store()
-    scores = store.scores
-    mask = filter_mask(scores, filters)
-    if search:
-        mask &= scores["id_text"].str.contains(search.strip(), regex=False).to_numpy()
-    positions = np.flatnonzero(mask)
-    values = scores[SORT_FIELDS[sort]].to_numpy(dtype=float)[positions]
-    key = np.where(np.isnan(values), np.inf, -values if order == "desc" else values)
-    positions = positions[np.argsort(key, kind="stable")]
+    positions = _select(filters, sort, order, search)
     total = len(positions)
     start = (page - 1) * size
-    page_rows = scores.iloc[positions[start:start + size]]
+    page_rows = get_store().scores.iloc[positions[start:start + size]]
     return {
         "filters": filters.active() if filters else {},
         "search": search or None,
@@ -123,6 +127,43 @@ def list_customers(filters: Filters | None = None, sort: str = "p_real", order: 
         "total_pages": max(1, -(-total // size)),
         "items": [_summary(row) for _, row in page_rows.iterrows()],
     }
+
+
+# Colonnes de l'export (libellés français, unités dans l'en-tête).
+EXPORT_COLUMNS: list[tuple[str, str]] = [
+    ("Customer_ID", "identifiant"),
+    ("niveau", "niveau"),
+    ("proba_reelle", "risque_mensuel_pct_taux_suppose_2pct"),
+    ("proba_calibree", "probabilite_calibree_echantillon"),
+    ("raison_1", "raison_principale"),
+    ("raison_2", "raison_2"),
+    ("raison_3", "raison_3"),
+    ("action", "action_suggeree"),
+    ("rev_Mean", "facture_mensuelle_dollars"),
+    ("revenu_en_jeu", "revenu_mensuel_en_jeu_dollars"),
+    ("segment", "segment"),
+    ("area", "region"),
+    ("months", "anciennete_mois"),
+    ("partition", "partition"),
+]
+
+
+def export_customers(filters: Filters | None = None, sort: str = "p_real", order: str = "desc",
+                     search: str | None = None) -> str:
+    """Export CSV de toute la sélection filtrée (mêmes filtres, recherche et tri que la liste).
+
+    Format pensé pour Excel en français : séparateur « ; », virgule décimale, BOM UTF-8.
+    Une ligne = un client de la base (pas d'équivalent portefeuille).
+    """
+    positions = _select(filters, sort, order, search)
+    rows = get_store().scores.iloc[positions]
+    out = pd.DataFrame({label: rows[col].to_numpy() for col, label in EXPORT_COLUMNS})
+    out["risque_mensuel_pct_taux_suppose_2pct"] = (
+        100 * out["risque_mensuel_pct_taux_suppose_2pct"]).round(2)
+    out["probabilite_calibree_echantillon"] = out["probabilite_calibree_echantillon"].round(4)
+    out["revenu_mensuel_en_jeu_dollars"] = out["revenu_mensuel_en_jeu_dollars"].round(2)
+    bom = chr(0xFEFF)  # Excel reconnaît l'UTF-8 grâce au BOM
+    return bom + out.to_csv(sep=";", decimal=",", index=False, lineterminator=chr(10))
 
 
 def _locate(store: Store, customer_id: int) -> int:

@@ -5,6 +5,9 @@ export const FILTER_LABELS: Record<GlobalFilterKey, string> = {
   cluster: "Segment",
   area: "Région",
   tenure_band: "Ancienneté",
+  handset_age_band: "Âge du terminal",
+  usage_band: "Usage",
+  action: "Action",
 };
 
 /** Présentation d'une valeur de filtre (régions en casse lisible). */

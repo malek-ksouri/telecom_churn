@@ -224,6 +224,33 @@ class Heatmap(Schema):
     cells: list[HeatmapCell]
 
 
+class ProfileTrait(Schema):
+    variable: str
+    label: str
+    unit: str
+    segment_median: float | None = Field(description="Médiane du segment (clients dans la base).")
+    overall_median: float | None = Field(description="Médiane de toute la base.")
+    direction: Literal["higher", "lower"]
+    gap_iqr: float | None = Field(description="Écart à la médiane globale, en écarts "
+                                              "interquartiles.")
+
+
+class SegmentProfile(GroupMetrics):
+    id: int
+    name: str
+    filter: dict[str, list[str]] = Field(description="Filtre à ajouter pour un drill-down.")
+    main_action: str | None = Field(description="Action la plus fréquente parmi les High et "
+                                                "Medium du segment.")
+    traits: list[ProfileTrait]
+
+
+class SegmentProfiles(Schema):
+    filters: dict[str, list[str]]
+    hypothesis: Hypothesis
+    note: str | None = None
+    profiles: list[SegmentProfile]
+
+
 # --- Facteurs --------------------------------------------------------------------------------
 
 class Driver(Schema):
@@ -237,6 +264,8 @@ class Driver(Schema):
     share_rows_increasing: float = Field(description="Part des clients pour qui le facteur "
                                                      "augmente le risque (0-1).")
     share_pct: float = Field(description="Part de l'importance totale (%).")
+    sensitive: bool = Field(description="Variable socio-démographique sensible : à ne pas "
+                                        "afficher ni utiliser pour cibler.")
 
 
 class DriverFamily(Schema):
@@ -276,9 +305,11 @@ class CampaignPoint(Schema):
         description="HYPOTHÈSE : churners attendus × taux de succès saisi par l'utilisateur.")
     preserved_revenue_monthly_hypothesis: float = Field(
         description="HYPOTHÈSE : revenu en jeu × taux de succès ($ / mois).")
+    preserved_revenue_horizon_hypothesis: float = Field(
+        description="HYPOTHÈSE : revenu mensuel préservé × horizon ($ sur l'horizon).")
     campaign_cost: float | None = Field(description="Coût total, seulement si offer_cost fourni.")
-    net_balance: float | None = Field(description="Revenu préservé × horizon − coût ; seulement si "
-                                                  "offer_cost fourni.")
+    net_balance: float | None = Field(description="Revenu préservé sur l'horizon − coût ; "
+                                                  "seulement si offer_cost fourni.")
 
 
 class UserHypotheses(Schema):

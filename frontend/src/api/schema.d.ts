@@ -109,6 +109,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/segments/profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Profils K-means : taille, risque, traits distinctifs
+         * @description Un profil par segment comportemental (appris sans la cible) : effectifs, risque, revenu
+         *     en jeu, action la plus fréquente et 3 traits (médianes comparées à la base entière).
+         */
+        get: operations["segment_profiles_api_segments_profiles_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/segments/{dimension}": {
         parameters: {
             query?: never;
@@ -186,6 +207,26 @@ export interface paths {
          * @description Pagination côté serveur. `total_n_rows` compte des clients de la base (lignes réelles).
          */
         get: operations["customers_api_customers_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/customers/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export CSV de la sélection filtrée
+         * @description Toute la sélection (mêmes filtres, recherche et tri que la liste), sans pagination.
+         */
+        get: operations["customers_export_api_customers_export_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -464,13 +505,18 @@ export interface components {
              */
             preserved_revenue_monthly_hypothesis: number;
             /**
+             * Preserved Revenue Horizon Hypothesis
+             * @description HYPOTHÈSE : revenu mensuel préservé × horizon ($ sur l'horizon).
+             */
+            preserved_revenue_horizon_hypothesis: number;
+            /**
              * Campaign Cost
              * @description Coût total, seulement si offer_cost fourni.
              */
             campaign_cost: number | null;
             /**
              * Net Balance
-             * @description Revenu préservé × horizon − coût ; seulement si offer_cost fourni.
+             * @description Revenu préservé sur l'horizon − coût ; seulement si offer_cost fourni.
              */
             net_balance: number | null;
         };
@@ -738,6 +784,11 @@ export interface components {
              * @description Part de l'importance totale (%).
              */
             share_pct: number;
+            /**
+             * Sensitive
+             * @description Variable socio-démographique sensible : à ne pas afficher ni utiliser pour cibler.
+             */
+            sensitive: boolean;
         };
         /** DriverFamily */
         DriverFamily: {
@@ -1243,6 +1294,35 @@ export interface components {
             /** Unit */
             unit: string;
         };
+        /** ProfileTrait */
+        ProfileTrait: {
+            /** Variable */
+            variable: string;
+            /** Label */
+            label: string;
+            /** Unit */
+            unit: string;
+            /**
+             * Segment Median
+             * @description Médiane du segment (clients dans la base).
+             */
+            segment_median: number | null;
+            /**
+             * Overall Median
+             * @description Médiane de toute la base.
+             */
+            overall_median: number | null;
+            /**
+             * Direction
+             * @enum {string}
+             */
+            direction: "higher" | "lower";
+            /**
+             * Gap Iqr
+             * @description Écart à la médiane globale, en écarts interquartiles.
+             */
+            gap_iqr: number | null;
+        };
         /** RetentionMessage */
         RetentionMessage: {
             /** Customer Id */
@@ -1377,6 +1457,94 @@ export interface components {
             filter: {
                 [key: string]: string[];
             };
+        };
+        /** SegmentProfile */
+        SegmentProfile: {
+            /**
+             * N Rows
+             * @description Clients dans la base : lignes réelles du jeu de données (listes, filtres).
+             */
+            n_rows: number;
+            /**
+             * N Portfolio Equiv
+             * @description ESTIMATION : effectif équivalent dans un portefeuille réel de 100 000 clients au taux de churn supposé (hypothèse, 2 % par mois).
+             */
+            n_portfolio_equiv: number;
+            /**
+             * Expected Churners
+             * @description Churners attendus sur un mois, en équivalent portefeuille (estimation).
+             */
+            expected_churners?: number | null;
+            /**
+             * Revenue At Risk
+             * @description Revenu mensuel en jeu ($ / mois) = probabilité corrigée × facture, équivalent portefeuille.
+             */
+            revenue_at_risk?: number | null;
+            /**
+             * Monthly Bill
+             * @description Facture mensuelle totale ($ / mois), équivalent portefeuille.
+             */
+            monthly_bill?: number | null;
+            /**
+             * Share Of Portfolio
+             * @description Part du périmètre (0-1), en équivalent portefeuille.
+             */
+            share_of_portfolio?: number | null;
+            /**
+             * Observed Churn Rate In Base
+             * @description Taux de churn historique observé dans la base (échantillon enrichi à ~50 % de churners : sert à comparer les groupes, pas à estimer un taux réel).
+             */
+            observed_churn_rate_in_base?: number | null;
+            /**
+             * Expected Churn Rate
+             * @description Probabilité mensuelle moyenne de départ (0-1), portefeuille.
+             */
+            expected_churn_rate?: number | null;
+            /**
+             * Share High
+             * @description Part de clients High (0-1), portefeuille.
+             */
+            share_high?: number | null;
+            /**
+             * Share Of Expected Churners
+             * @description Part des churners attendus du périmètre.
+             */
+            share_of_expected_churners?: number | null;
+            /**
+             * Share Of Revenue At Risk
+             * @description Part du revenu en jeu du périmètre.
+             */
+            share_of_revenue_at_risk?: number | null;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /**
+             * Filter
+             * @description Filtre à ajouter pour un drill-down.
+             */
+            filter: {
+                [key: string]: string[];
+            };
+            /**
+             * Main Action
+             * @description Action la plus fréquente parmi les High et Medium du segment.
+             */
+            main_action: string | null;
+            /** Traits */
+            traits: components["schemas"]["ProfileTrait"][];
+        };
+        /** SegmentProfiles */
+        SegmentProfiles: {
+            /** Filters */
+            filters: {
+                [key: string]: string[];
+            };
+            hypothesis: components["schemas"]["Hypothesis"];
+            /** Note */
+            note?: string | null;
+            /** Profiles */
+            profiles: components["schemas"]["SegmentProfile"][];
         };
         /** Segments */
         Segments: {
@@ -1634,6 +1802,50 @@ export interface operations {
             };
         };
     };
+    segment_profiles_api_segments_profiles_get: {
+        parameters: {
+            query?: {
+                /** @description Niveau de risque. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
+                risk_level?: string[] | null;
+                /** @description Segment K-means. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
+                cluster?: string[] | null;
+                /** @description Région. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
+                area?: string[] | null;
+                /** @description Tranche d'ancienneté. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
+                tenure_band?: string[] | null;
+                /** @description Tranche d'âge du terminal. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
+                handset_age_band?: string[] | null;
+                /** @description Tranche d'usage. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
+                usage_band?: string[] | null;
+                /** @description Action suggérée. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
+                action?: string[] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SegmentProfiles"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     segments_api_segments__dimension__get: {
         parameters: {
             query?: {
@@ -1735,7 +1947,7 @@ export interface operations {
                 success_rate?: number;
                 /** @description Coût de l'offre par client contacté ($). Sans valeur : ni coût ni solde. */
                 offer_cost?: number | null;
-                /** @description Mois de revenu préservé comptés dans le solde. */
+                /** @description HYPOTHÈSE : mois de revenu préservé comptés (revenu sur l'horizon et solde). */
                 revenue_horizon_months?: number;
                 /** @description Niveau de risque. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
                 risk_level?: string[] | null;
@@ -1819,6 +2031,54 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CustomerPage"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    customers_export_api_customers_export_get: {
+        parameters: {
+            query?: {
+                /** @description Champ de tri. */
+                sort?: "p_real" | "revenue_at_risk_monthly" | "monthly_bill" | "tenure_months" | "handset_age_days" | "customer_id";
+                order?: string;
+                search?: string | null;
+                /** @description Niveau de risque. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
+                risk_level?: string[] | null;
+                /** @description Segment K-means. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
+                cluster?: string[] | null;
+                /** @description Région. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
+                area?: string[] | null;
+                /** @description Tranche d'ancienneté. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
+                tenure_band?: string[] | null;
+                /** @description Tranche d'âge du terminal. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
+                handset_age_band?: string[] | null;
+                /** @description Tranche d'usage. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
+                usage_band?: string[] | null;
+                /** @description Action suggérée. Valeurs possibles : GET /api/filters. Répéter le paramètre pour plusieurs valeurs (OU). */
+                action?: string[] | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CSV (séparateur « ; », virgule décimale, UTF-8 avec BOM) : une ligne par client de la base. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": unknown;
                 };
             };
             /** @description Validation Error */

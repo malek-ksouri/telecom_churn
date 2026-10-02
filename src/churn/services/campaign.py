@@ -38,6 +38,7 @@ def _result(row: Any, success_rate: float, offer_cost: float | None,
     revenue = float(row["revenu_en_jeu"])
     avoided = expected * success_rate
     preserved = revenue * success_rate
+    preserved_horizon = preserved * horizon
     cost = None if offer_cost is None else offer_cost * n
     return {
         "capacity_pct": round(100 * float(row["capacite"]), 6),
@@ -53,8 +54,9 @@ def _result(row: Any, success_rate: float, offer_cost: float | None,
         "observed_churners_check": float(row["churners_observes"]),
         "avoided_departures_hypothesis": avoided,
         "preserved_revenue_monthly_hypothesis": preserved,
+        "preserved_revenue_horizon_hypothesis": preserved_horizon,
         "campaign_cost": cost,
-        "net_balance": None if cost is None else preserved * horizon - cost,
+        "net_balance": None if cost is None else preserved_horizon - cost,
     }
 
 

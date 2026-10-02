@@ -152,3 +152,61 @@ def test_campaign_simulator(client: TestClient) -> None:
         3 * res["preserved_revenue_monthly_hypothesis"] - res["campaign_cost"])
     assert res["targeted_n_portfolio_equiv"] == pytest.approx(10_000, rel=0.01)
     assert sim["inactive"]["n_rows"] == get(client, "/api/kpis")["inactive_n_rows"]
+
+
+def test_campaign_revenue_horizon(client: TestClient) -> None:
+    one = get(client, "/api/campaign/simulate", capacity_pct=10, success_rate=0.2)["result"]
+    twelve = get(client, "/api/campaign/simulate", capacity_pct=10, success_rate=0.2,
+                 offer_cost=5, revenue_horizon_months=12)["result"]
+    assert one["preserved_revenue_horizon_hypothesis"] == pytest.approx(
+        one["preserved_revenue_monthly_hypothesis"])
+    assert twelve["preserved_revenue_horizon_hypothesis"] == pytest.approx(
+        12 * twelve["preserved_revenue_monthly_hypothesis"])
+    assert twelve["net_balance"] == pytest.approx(
+        twelve["preserved_revenue_horizon_hypothesis"] - twelve["campaign_cost"])
+    assert client.get("/api/campaign/simulate",
+                      params={"revenue_horizon_months": 0}).status_code == 422
+
+
+def test_segment_profiles(client: TestClient) -> None:
+    body = schemas.SegmentProfiles.model_validate(get(client, "/api/segments/profiles"))
+    assert len(body.profiles) == 5
+    assert sum(p.n_rows for p in body.profiles) == 100_000
+    rates = [p.expected_churn_rate for p in body.profiles]
+    assert rates == sorted(rates, reverse=True)
+    assert all(len(p.traits) == 3 and p.main_action for p in body.profiles)
+    first = body.profiles[0]
+    filtered = get(client, "/api/kpis", cluster=first.name)
+    assert filtered["n_rows"] == first.n_rows
+
+
+def test_drivers_flag_sensitive_variables(client: TestClient) -> None:
+    from churn.business.actions import SENSITIVE_VARIABLES
+
+    body = get(client, "/api/drivers", top=60)
+    items = body["actionable"] + body["context"]
+    assert all(i["sensitive"] == (i["variable"] in SENSITIVE_VARIABLES) for i in items)
+    assert any(i["sensitive"] for i in body["context"])
+    assert not any(i["sensitive"] for i in body["actionable"])
+
+
+def test_customers_export_csv(client: TestClient) -> None:
+    import csv
+    import io
+
+    params = {"risk_level": "High", "action": "Offre de réengagement"}
+    r = client.get("/api/customers/export", params=params)
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/csv")
+    assert "clients_a_risque.csv" in r.headers["content-disposition"]
+    text = r.content.decode("utf-8")
+    assert text.startswith("\ufeff")
+    rows = list(csv.DictReader(io.StringIO(text.lstrip("\ufeff")), delimiter=";"))
+    listed = get(client, "/api/customers", size=1, **params)
+    assert len(rows) == listed["total_n_rows"] > 0
+    assert {r["niveau"] for r in rows} == {"High"}
+    assert {r["action_suggeree"] for r in rows} == {"Offre de réengagement"}
+    risks = [float(r["risque_mensuel_pct_taux_suppose_2pct"].replace(",", ".")) for r in rows]
+    assert risks == sorted(risks, reverse=True)
+    assert rows[0]["identifiant"] == str(listed["items"][0]["customer_id"])
+    one = client.get("/api/customers/export", params={"search": "1072931"}).content.decode()
+    assert "1072931" in one and len(one.strip().splitlines()) == 2

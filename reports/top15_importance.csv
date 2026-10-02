@@ -1,0 +1,16 @@
+variable,rang,type,test,effet,interpretation,ecart_classes_pts,forme_courbe,info_mutuelle,p_ajustee_holm,a_retirer_logreg,representante
+months,1,numérique,Mann-Whitney U,0.0533798225176616,négligeable,28.72,non monotone,0.018356839172323003,3.3084517424477338e-37,False,months
+eqpdays,2,numérique,Mann-Whitney U,0.14894776910311025,faible,23.86,non monotone,0.01654986893689636,6.254824560241828e-289,False,eqpdays
+totmrc_Mean,3,numérique,Mann-Whitney U,-0.08416861997025205,négligeable,13.43,monotone,0.011848696207879206,2.367248212097137e-92,False,totmrc_Mean
+hnd_price,4,numérique,Mann-Whitney U,-0.11847660884038058,faible,20.840000000000003,monotone,0.006429851723584078,1.3709025491297103e-186,False,hnd_price
+adjrev,5,numérique,Mann-Whitney U,0.04199582155508774,négligeable,12.099999999999994,non monotone,0.005573734874020131,6.169293832053231e-23,True,"totrev (retirée, VIF)"
+mouowylisv_Mean,6,numérique,Mann-Whitney U,-0.06304350551839122,négligeable,9.219999999999999,monotone,0.005526719874674457,6.229356187295204e-52,False,mouowylisv_Mean
+opk_vce_Mean,7,numérique,Mann-Whitney U,-0.07057477588127836,négligeable,12.350000000000001,monotone,0.004717918860032588,5.455814294182935e-65,True,"opk_vce_Mean (retirée, VIF)"
+change_rev,8,numérique,Mann-Whitney U,-0.010921667605342855,négligeable,6.68,non monotone,0.004534681245473182,0.1695406325586785,False,change_rev
+change_mou,9,numérique,Mann-Whitney U,-0.060614609301211875,négligeable,10.079999999999998,monotone,0.004281790074915914,1.8128893441119727e-47,False,change_mou
+hnd_webcap,10,catégorielle,χ²,0.09183984880156085,négligeable,11.899999999999999,sans objet,0.00423087129022133,7.216714513051403e-144,False,hnd_webcap
+rev_Mean,11,numérique,Mann-Whitney U,-0.029895307460635068,négligeable,7.32,non monotone,0.004168180135401878,1.671066391967798e-11,False,rev_Mean
+mou_cvce_Mean,12,numérique,Mann-Whitney U,-0.08124551410967407,négligeable,11.940000000000005,monotone,0.0038994105020240255,4.059503859642579e-86,False,mou_cvce_Mean
+avg3mou,13,numérique,Mann-Whitney U,-0.06732448328075114,négligeable,12.64,monotone,0.00372790767529807,4.388192321440857e-59,True,mou_Mean
+attempt_Mean,14,numérique,Mann-Whitney U,-0.06672784135035337,négligeable,12.21,monotone,0.0035396108777174806,4.482179714398729e-58,True,"attempt_Mean (retirée, VIF)"
+mou_Mean,15,numérique,Mann-Whitney U,-0.07896059941507616,négligeable,14.490000000000002,monotone,0.003444163678084866,5.434142314480536e-81,False,mou_Mean

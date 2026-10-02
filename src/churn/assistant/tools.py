@@ -22,17 +22,11 @@ from typing import Any, Literal
 from pydantic import BaseModel, Field, ValidationError
 
 from churn import services
+from churn.business.actions import SENSITIVE_VARIABLES
 from churn.services import CustomerNotFoundError, Filters
 
 logger = logging.getLogger(__name__)
 
-# Variables socio-démographiques sensibles : exclues de toute sortie d'outil (et de toute
-# réponse de l'assistant, contrôlé par les garde-fous). `ethnic` n'est même pas dans le modèle.
-SENSITIVE_VARIABLES: frozenset[str] = frozenset({
-    "ethnic", "income", "marital", "adults", "kid0_2", "kid3_5", "kid6_10", "kid11_15",
-    "kid16_17", "HHstatin", "dwllsize", "dwlltype", "ownrent", "numbcars", "creditcd", "truck",
-    "rv", "forgntvl", "prizm_social_one", "infobase",
-})
 MAX_LIST = 20
 
 

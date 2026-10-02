@@ -1,12 +1,12 @@
 # Fiche du modèle de churn
 
-*Générée le 30/09/2026 par `scripts/train.py`.*
+*Générée le 02/10/2026 par `scripts/train.py`.*
 
 ## Modèle
 
 - **Type** : LightGBM (boosting de gradient) (`build_pipeline("lightgbm")`).
 - **Usage prévu** : classer les clients par risque de départ pour cibler une campagne de rétention à budget limité. Aide à la décision, pas décision automatique.
-- **Sortie** : score de risque (probabilité sur l'échantillon équilibré, **non calibrée** à ce stade : calibration et correction vers le taux réel en E10).
+- **Sortie** : probabilité calibrée sur l'échantillon équilibré (sert au classement) et probabilité mensuelle ramenée au taux de churn réel **supposé** (sert aux chiffres métier).
 
 ### Hyperparamètres
 
@@ -26,7 +26,7 @@
 ## Données
 
 - **Entraînement** : `data/processed/train.parquet`, 80000 clients (80 % du CSV, split stratifié, graine 42).
-- **Test** : `data/processed/test.parquet`, 20 000 clients, lu **une seule fois** (E9).
+- **Test** : `data/processed/test.parquet`, 20 000 clients, jamais utilisé pour un choix : lu pour l'évaluation finale (classement en E9, calibration en E10, modèle figé avant chaque lecture), puis pour noter ses clients comme de nouveaux clients (E12).
 - **Cible** : `churn` = 1 si le client part dans la fenêtre d'observation, soit environ 1 mois (départ entre J+31 et J+60). Échantillon **équilibré** (49,6 % de churners), non représentatif du taux réel (hypothèse : 2 % par mois).
 - **Features** : variables d'origine nettoyées + familles `cycle_engagement, tendance_usage, forfait, compte_terminal, indicateurs_manquants`.
 - **Variables exclues** : `Customer_ID`, `churn`, `ethnic` (identifiant, cible, et `ethnic` pour raison éthique et réglementaire).
@@ -63,13 +63,52 @@
 | 2 % par mois | 0,0200 | 0,056 | 2,80 |
 | 3 % par mois | 0,0300 | 0,083 | 2,78 |
 
-- **Lecture** : à 2 % de churn mensuel (hypothèse), pour 1 000 clients contactés, le ciblage atteint environ 56 futurs churners contre 20 au hasard ; les départs évités dépendent du taux de succès de l'offre, à mesurer (il n'est pas dans les données).
+- **Lecture** : à 2 % de churn mensuel (hypothèse), le top 10 % de **tous** les clients contient environ 56 futurs churners pour 1 000, contre 20 au hasard : c'est la performance du modèle. Le chiffre de **campagne** (inactifs exclus de l'offre) est de 51 pour 1 000 (section suivante). Les départs évités dépendent du taux de succès de l'offre, à mesurer (il n'est pas dans les données).
+
+## Usage métier (niveaux de risque et campagne)
+
+- **High** : probabilité calibrée ≥ 0,6484 (capacité de campagne : 10 % du portefeuille). **Medium** : ≥ 0,5327 (bandes de 5 % dont le lift reste > 1,2). **Low** : le reste. **Inactif** (0 minute ou usage non mesuré) : à part, action « vérifier la ligne / reconquête », jamais ciblé par une offre de fidélisation.
+- Seuils fixés sur les scores hors fold du train, portefeuille repondéré au taux réel supposé.
+- Deux effectifs : **clients dans la base** (lignes réelles, environ 50 % de churners) et **estimation portefeuille** (équivalent dans un portefeuille réel de 100 000 clients au taux supposé).
+
+| Niveau | Clients dans la base | Estimation portefeuille | Risque mensuel moyen (taux supposé) | Churn observé dans la base |
+|---|---|---|---|---|
+| High | 17 472 | 9 876 | 5,1 % | 72,4 % |
+| Medium | 24 122 | 19 836 | 2,9 % | 58,9 % |
+| Low | 56 434 | 69 375 | 1,2 % | 37,5 % |
+| Inactif | 1 972 | 913 | 7,2 % | 77,8 % |
+
+- **Chiffre officiel de campagne** : en contactant les 10 % de clients actifs les plus risqués, environ **51 futurs churners pour 1 000 clients contactés**, contre 20 au hasard (facteur 2,55) ; revenu mensuel en jeu de 30 059 $ pour un portefeuille de 100 000 clients.
+- Ce sont des churners **atteints**, pas des départs évités : ceux-ci dépendent du taux de succès de l'offre, inconnu (à mesurer avec un groupe témoin).
+
+## Explicabilité
+
+- SHAP (`TreeExplainer`, en log-odds) sur le LightGBM, contributions regroupées sur la variable d'origine. Facteurs dominants : âge du terminal, évolution de l'usage, ancienneté (pic à 11-12 mois, fin d'engagement).
+- Par client : 3 **raisons actionnables** (terminal, engagement, usage, forfait, réseau, service client, lignes) qui augmentent le risque, une **action suggérée** déduite de la première, et 2 facteurs de **contexte** non actionnables.
+- Les raisons décrivent le modèle (« selon le modèle »), **pas des causes** du départ.
+
+## Segmentation (descriptive)
+
+- K-means à 5 segments sur 11 variables d'usage, de facture, d'ancienneté et de terminal, sans la cible, ajusté sur le train (`models/segmentation.joblib`, refait par `make train`). Sert à décrire le portefeuille ; le modèle de churn ne l'utilise pas.
+
+## Considérations éthiques
+
+- `ethnic` est exclue du modèle.
+- 19 autres variables socio-démographiques sensibles restent des entrées du modèle (elles proviennent du jeu de données) : `adults`, `creditcd`, `dwllsize`, `dwlltype`, `forgntvl`, `HHstatin`, `income`, `infobase`, `kid0_2`, `kid11_15`, `kid16_17`, `kid3_5`, `kid6_10`, `marital`, `numbcars`, `ownrent`, `prizm_social_one`, `rv`, `truck`. Elles ne sont **jamais** affichées, jamais utilisées comme raison ou action, et jamais transmises à l'assistant IA (filtrées dans ses outils).
+- Le score sert à prioriser une offre de fidélisation, pas à refuser un service.
 
 ## Limites
 
-- **Probabilités non calibrées** et issues d'un échantillon équilibré : ne pas les lire comme des probabilités réelles avant E10.
+- **Chiffres absolus conditionnels** : les probabilités mensuelles et les effectifs « estimation portefeuille » dépendent du taux de churn réel **supposé** (2 %, sensibilité 1-3 %) ; le classement, lui, n'en dépend pas.
 - **Signal faible** : aucune variable n'explique seule le churn (corrélation maximale 0,13) ; le modèle combine de nombreux petits effets.
 - **Seuils issus de l'EDA** (11-12 mois, 300 jours) choisis sur le train : la CV est légèrement optimiste ; le test donne la mesure impartiale.
 - **Associations, pas causes** : un facteur associé au churn n'est pas forcément un levier d'action.
 - **Clients « déjà partis »** (sans usage ou sans variation d'usage) : signal réel mais de poids négligeable (test de fuite E8, D67).
 - **Pas de dimension temporelle** : split aléatoire, pas de validation sur une période future ; la dérive des données n'est pas suivie (hors périmètre).
+- **Équité non auditée** : les écarts de score selon les variables sensibles n'ont pas été mesurés.
+
+## Suivi recommandé avant un usage réel
+
+- Mesurer le vrai taux de churn mensuel et le taux de succès de l'offre (groupe témoin), puis remplacer les hypothèses de `configs/config.yaml`.
+- Valider sur une période future et suivre la dérive des variables et du score.
+- Réentraîner sans les variables socio-démographiques sensibles et mesurer le coût en AUC.

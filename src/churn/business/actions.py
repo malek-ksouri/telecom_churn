@@ -47,6 +47,15 @@ FAMILIES: dict[str, list[str]] = {
     CARE: ["custcare_Mean", "cc_mou_Mean", "ccrndmou_Mean"],
     LINES: ["actvsubs", "uniqsubs"],
 }
+
+# Variables socio-démographiques sensibles : exclues de toute sortie d'outil de l'assistant et
+# masquées dans le tableau de bord (D97). `ethnic` n'est même pas dans le modèle (D4).
+SENSITIVE_VARIABLES: frozenset[str] = frozenset({
+    "ethnic", "income", "marital", "adults", "kid0_2", "kid3_5", "kid6_10", "kid11_15",
+    "kid16_17", "HHstatin", "dwllsize", "dwlltype", "ownrent", "numbcars", "creditcd", "truck",
+    "rv", "forgntvl", "prizm_social_one", "infobase",
+})
+
 FAMILY_OF: dict[str, str] = {v: f for f, variables in FAMILIES.items() for v in variables}
 
 FAMILY_LABELS: dict[str, str] = {

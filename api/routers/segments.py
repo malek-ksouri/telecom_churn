@@ -5,8 +5,8 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, Query
 
 from api.dependencies import get_filters
-from api.schemas import Dimension, Heatmap, Segments
-from churn.services import Filters, get_heatmap, get_segments
+from api.schemas import Dimension, Heatmap, SegmentProfiles, Segments
+from churn.services import Filters, get_heatmap, get_segment_profiles, get_segments
 
 router = APIRouter(tags=["segments"])
 
@@ -20,6 +20,14 @@ def heatmap(filters: Annotated[Filters, Depends(get_filters)],
     """Churn observé dans la base et risque attendu par cellule (x × y). Taux masqués (null)
     pour les cellules de moins de 30 lignes."""
     return get_heatmap(x, y, filters)
+
+
+@router.get("/segments/profiles", response_model=SegmentProfiles,
+            summary="Profils K-means : taille, risque, traits distinctifs")
+def segment_profiles(filters: Annotated[Filters, Depends(get_filters)]) -> dict:
+    """Un profil par segment comportemental (appris sans la cible) : effectifs, risque, revenu
+    en jeu, action la plus fréquente et 3 traits (médianes comparées à la base entière)."""
+    return get_segment_profiles(filters)
 
 
 @router.get("/segments/{dimension}", response_model=Segments,

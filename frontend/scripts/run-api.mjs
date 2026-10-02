@@ -1,6 +1,6 @@
 // Lance l'API FastAPI avec le Python du venv du projet (Windows ou Linux/macOS).
 // Utilisé par `npm run api` et `npm run dev:all`.
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -20,7 +20,21 @@ const child = spawn(
   ["-m", "uvicorn", "api.main:app", "--reload", "--port", "8000"],
   { cwd: root, stdio: "inherit" },
 );
-child.on("exit", (code) => process.exit(code ?? 0));
-for (const signal of ["SIGINT", "SIGTERM"]) {
-  process.on(signal, () => child.kill(signal));
+// Arrêt de tout l'arbre : sous Windows, le rechargeur d'uvicorn lance un processus « worker »
+// qui survivrait (et garderait le port 8000) si l'on ne tuait que le processus principal.
+function stopTree() {
+  if (child.exitCode !== null) return;
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { stdio: "ignore" });
+  } else {
+    child.kill("SIGTERM");
+  }
 }
+child.on("exit", (code) => process.exit(code ?? 0));
+for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"]) {
+  process.on(signal, () => {
+    stopTree();
+    process.exit(0);
+  });
+}
+process.on("exit", stopTree);

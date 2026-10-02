@@ -6,12 +6,13 @@ import { AnimatedNumber } from "./AnimatedNumber";
 import classes from "./KpiCard.module.css";
 
 /** Nature de l'effectif affiché : lignes réelles ou estimation au taux supposé. */
-export type CountNature = "base" | "portfolio" | "model" | "none";
+export type CountNature = "base" | "portfolio" | "model" | "hypothesis" | "none";
 
 const NATURE_LABEL: Record<CountNature, string> = {
   base: "clients dans la base",
   portfolio: "estimation portefeuille",
   model: "mesure du modèle",
+  hypothesis: "hypothèse saisie",
   none: "",
 };
 
@@ -29,18 +30,28 @@ interface KpiCardProps {
   loading?: boolean;
   /** Mise en avant (KPI principal de la page). */
   emphasis?: boolean;
+  /** Valeur plus petite, pour les grilles denses. */
+  compact?: boolean;
 }
 
 export function KpiCard({
   label, value, format, nature, detail, definition, icon, loading = false, emphasis = false,
+  compact = false,
 }: KpiCardProps) {
   return (
-    <Paper className={classes.card} data-emphasis={emphasis || undefined} p="lg" withBorder>
+    <Paper
+      className={classes.card}
+      data-emphasis={emphasis || undefined}
+      data-hypothesis={nature === "hypothesis" || undefined}
+      data-compact={compact || undefined}
+      p={compact ? "md" : "lg"}
+      withBorder
+    >
       <Stack gap={6}>
         <Group justify="space-between" wrap="nowrap" gap="xs">
           <Group gap={8} wrap="nowrap">
-            {icon && <span className={classes.icon}>{icon}</span>}
-            <Text size="sm" fw={500} c="var(--app-text-secondary)" lineClamp={2}>
+            {icon && !compact && <span className={classes.icon}>{icon}</span>}
+            <Text size="sm" fw={500} c="var(--app-text-secondary)" lineClamp={1}>
               {label}
             </Text>
           </Group>
@@ -50,8 +61,10 @@ export function KpiCard({
             </span>
           </Tooltip>
         </Group>
-        {loading || value === null || value === undefined ? (
-          <Skeleton height={34} width="60%" my={2} />
+        {loading ? (
+          <Skeleton height={compact ? 28 : 34} width="60%" my={2} />
+        ) : value === null || value === undefined ? (
+          <Text className={classes.value} component="div" c="var(--app-text-muted)" aria-label="non disponible">—</Text>
         ) : (
           <Text className={classes.value} component="div">
             <AnimatedNumber value={value} format={format} />

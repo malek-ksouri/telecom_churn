@@ -6,8 +6,9 @@ import { IconFilter, IconMoon, IconSun } from "@tabler/icons-react";
 import { useLocation } from "react-router-dom";
 
 import { useAssistantStatus, useFilterOptions } from "../api/queries";
-import { GLOBAL_FILTER_KEYS } from "../api/types";
+import { HEADER_FILTER_KEYS } from "../api/types";
 import { ActiveFilterChips } from "../components/ActiveFilterChips";
+import { ChatPanelButton } from "../components/chat/ChatPanel";
 import { HypothesisBadge } from "../components/Badges";
 import { FilterMenu } from "../components/FilterMenu";
 import classes from "./Header.module.css";
@@ -38,6 +39,7 @@ function AssistantStatusBadge() {
   const { data, isLoading, isError } = useAssistantStatus();
   if (isLoading) return <Skeleton height={22} width={120} radius="sm" />;
   const live = data?.live_llm === true;
+  const short = isError || !data ? "IA indisponible" : live ? "Gemini" : "Démo";
   const label = isError || !data ? "Assistant indisponible" : live ? "Assistant : Gemini" : "Assistant : démo";
   let tooltip = "Le statut de l'assistant n'a pas pu être lu.";
   if (data && !isError) {
@@ -61,7 +63,8 @@ function AssistantStatusBadge() {
           },
         }}
       >
-        {label}
+        <Text span inherit visibleFrom="lg">{label}</Text>
+        <Text span inherit hiddenFrom="lg">{short}</Text>
       </Badge>
     </Tooltip>
   );
@@ -91,6 +94,7 @@ export function Header() {
           <HypothesisBadge />
           <AssistantStatusBadge />
           <Divider orientation="vertical" color="var(--app-border)" />
+          <ChatPanelButton />
           <ThemeToggle />
         </Group>
       </Group>
@@ -100,10 +104,10 @@ export function Header() {
           <Text size="xs" fw={600} tt="uppercase" style={{ letterSpacing: "0.05em" }}>Filtres</Text>
         </Group>
         {options.isLoading ? (
-          <Group gap={8}>{GLOBAL_FILTER_KEYS.map((k) => <Skeleton key={k} height={30} width={96} />)}</Group>
+          <Group gap={8}>{HEADER_FILTER_KEYS.map((k) => <Skeleton key={k} height={30} width={96} />)}</Group>
         ) : (
           <Group gap={8} wrap="nowrap">
-            {GLOBAL_FILTER_KEYS.map((key) => {
+            {HEADER_FILTER_KEYS.map((key) => {
               const dim = options.data?.dimensions.find((d) => d.dimension === key);
               return <FilterMenu key={key} dimension={key} values={dim?.values ?? []} />;
             })}

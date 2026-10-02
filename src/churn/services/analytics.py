@@ -13,7 +13,13 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
-from churn.business.actions import CONTEXT, ENGAGEMENT, FAMILY_LABELS, family
+from churn.business.actions import (
+    CONTEXT,
+    ENGAGEMENT,
+    FAMILY_LABELS,
+    SENSITIVE_VARIABLES,
+    family,
+)
 from churn.business.campaign import PORTFOLIO_WEIGHT, campaign_curve
 from churn.business.scoring import HIGH, TIERS
 from churn.config import get_config
@@ -311,6 +317,7 @@ def get_drivers(filters: Filters | None = None, top: int = 15) -> dict[str, Any]
         i["share_pct"] = 100 * i["mean_abs_shap"] / total
         i["actionable"] = i["family"] != CONTEXT
         i["family_label"] = FAMILY_LABELS[i["family"]]
+        i["sensitive"] = i["variable"] in SENSITIVE_VARIABLES
     items.sort(key=lambda i: i["mean_abs_shap"], reverse=True)
     families: dict[str, float] = {}
     for i in items:
@@ -327,3 +334,62 @@ def get_drivers(filters: Filters | None = None, top: int = 15) -> dict[str, Any]
                       "share_pct": v} for f, v in sorted(families.items(),
                                                          key=lambda kv: -kv[1])],
     }
+
+
+# Variables décrivant un profil K-means (colonne, libellé, unité).
+PROFILE_TRAITS: list[tuple[str, str, str]] = [
+    ("months", "Ancienneté", "mois"),
+    ("eqpdays", "Âge du terminal", "jours"),
+    ("mou_Mean", "Minutes d'appel", "min / mois"),
+    ("change_mou", "Évolution de l'usage", "min / mois"),
+    ("totmrc_Mean", "Forfait", "$ / mois"),
+    ("rev_Mean", "Facture", "$ / mois"),
+    ("hnd_price", "Prix du terminal", "$"),
+    ("ovrrev_Mean", "Dépassements", "$ / mois"),
+]
+N_TRAITS = 3
+
+
+def get_segment_profiles(filters: Filters | None = None) -> dict[str, Any]:
+    """Cartes des profils K-means : taille, risque, revenu en jeu, action la plus fréquente et
+    3 traits distinctifs.
+
+    Un trait compare la médiane du segment (clients dans la base, périmètre filtré) à la
+    médiane de toute la base, en écarts interquartiles : les 3 plus grands écarts décrivent le
+    profil. Les segments ont été appris sans la cible (E4b).
+    """
+    store = get_store()
+    scores = store.scores
+    sub = scores[filter_mask(scores, filters)]
+    if not len(sub):
+        return {"filters": filters.active() if filters else {}, "hypothesis": hypothesis(store),
+                "profiles": []}
+    metrics = _group_rows(sub, ["cluster"])
+    columns = [c for c, _, _ in PROFILE_TRAITS]
+    overall = scores[columns].median()
+    spread = (scores[columns].quantile(0.75) - scores[columns].quantile(0.25)).replace(0, np.nan)
+    spread = spread.fillna(scores[columns].std())
+    medians = sub.groupby("segment")[columns].median()
+    targeted = sub[sub["niveau"].isin(["High", "Medium"])]
+    actions = targeted.groupby("segment")["action"].agg(
+        lambda s: s.value_counts().index[0] if len(s) else None)
+    ids = sub.groupby("segment")["segment_id"].first()
+    profiles = []
+    for name in metrics.index:
+        z = (medians.loc[name] - overall) / spread
+        top = z.abs().sort_values(ascending=False).index[:N_TRAITS]
+        traits = [{
+            "variable": col, "label": label_, "unit": unit,
+            "segment_median": num(medians.loc[name, col]), "overall_median": num(overall[col]),
+            "direction": "higher" if z[col] > 0 else "lower", "gap_iqr": num(z[col]),
+        } for col, label_, unit in PROFILE_TRAITS if col in top]
+        traits.sort(key=lambda t: -abs(t["gap_iqr"] or 0))
+        profiles.append({
+            "id": int(ids.loc[name]), "name": name, "filter": {"cluster": [name]},
+            **_row_dict(metrics.loc[name]),
+            "main_action": actions.get(name), "traits": traits,
+        })
+    profiles.sort(key=lambda p: -(p["expected_churn_rate"] or 0))
+    return {"filters": filters.active() if filters else {}, "hypothesis": hypothesis(store),
+            "note": "Traits : médianes des clients dans la base, comparées à la base entière.",
+            "profiles": profiles}

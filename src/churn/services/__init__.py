@@ -6,12 +6,14 @@ from churn.services.analytics import (
     get_heatmap,
     get_kpis,
     get_risk_distribution,
+    get_segment_profiles,
     get_segments,
 )
 from churn.services.campaign import simulate_campaign
 from churn.services.customers import (
     CustomerNotFoundError,
     explain_customer,
+    export_customers,
     get_customer,
     list_customers,
 )
@@ -23,12 +25,14 @@ __all__ = [
     "CustomerNotFoundError",
     "Filters",
     "explain_customer",
+    "export_customers",
     "get_customer",
     "get_drivers",
     "get_filter_options",
     "get_heatmap",
     "get_kpis",
     "get_risk_distribution",
+    "get_segment_profiles",
     "get_segments",
     "get_store",
     "list_customers",

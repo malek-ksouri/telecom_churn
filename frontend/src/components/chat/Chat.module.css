@@ -1,0 +1,201 @@
+.thread {
+  min-height: 0;
+}
+
+.user {
+  align-self: flex-end;
+  max-width: 82%;
+  padding: 10px 14px;
+  border-radius: 14px 14px 4px 14px;
+  background: var(--app-accent);
+  color: #ffffff;
+  font-size: 14px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+[data-mantine-color-scheme="dark"] .user {
+  color: #062b27;
+}
+
+/* Réponse : surface opaque (jamais de verre derrière du texte ou des chiffres). */
+.assistant {
+  align-self: flex-start;
+  max-width: 94%;
+  padding: 12px 16px;
+  border-radius: 14px 14px 14px 4px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+  box-shadow: var(--app-shadow-card);
+}
+
+.markdown {
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--app-text);
+}
+
+.markdown > :first-child {
+  margin-top: 0;
+}
+
+.markdown > :last-child {
+  margin-bottom: 0;
+}
+
+.markdown p {
+  margin: 0 0 8px;
+}
+
+.markdown ul,
+.markdown ol {
+  margin: 4px 0 8px;
+  padding-left: 20px;
+}
+
+.markdown li {
+  margin: 3px 0;
+}
+
+.markdown strong {
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.markdown table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  font-size: 13px;
+}
+
+.markdown th,
+.markdown td {
+  border-bottom: 1px solid var(--app-border);
+  padding: 4px 10px 4px 0;
+  text-align: left;
+}
+
+.clientLink {
+  display: inline;
+  font-weight: 650;
+  color: var(--app-accent-text);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in srgb, var(--app-accent) 45%, transparent);
+  text-underline-offset: 2px;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+.clientLink:hover {
+  text-decoration-color: var(--app-accent);
+}
+
+.clientLink:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 1px;
+}
+
+.tools {
+  min-width: 0;
+  flex: 1;
+}
+
+.toolsToggle {
+  padding: 2px 8px;
+  border-radius: 6px;
+  color: var(--app-text-secondary);
+  background: var(--app-raised);
+  border: 1px solid var(--app-border);
+}
+
+.toolsToggle:hover {
+  border-color: var(--app-border-strong);
+}
+
+.chevron {
+  transition: transform var(--app-transition-fast);
+}
+
+.chevron[data-open] {
+  transform: rotate(180deg);
+}
+
+.toolRow {
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--app-raised);
+}
+
+.toolArgs {
+  margin-top: 4px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: transparent;
+  padding: 0;
+  color: var(--app-text-secondary);
+}
+
+.suggestion {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--app-border);
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-card);
+  transition: border-color var(--app-transition-fast), transform var(--app-transition-fast);
+}
+
+.suggestion:hover {
+  border-color: color-mix(in srgb, var(--app-accent) 55%, var(--app-border));
+}
+
+.suggestion:active {
+  transform: translateY(1px);
+}
+
+.suggestion:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+}
+
+.suggestion:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.suggestionIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  flex-shrink: 0;
+  color: var(--app-accent-text);
+  background: color-mix(in srgb, var(--app-accent) 12%, transparent);
+}
+
+.composer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--app-border);
+  background: var(--app-surface);
+}
+
+/* Panneau latéral : surface flottante vitrée ; les bulles restent opaques. */
+.panel {
+  background: var(--app-glass);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border-left: 1px solid var(--app-glass-border);
+  box-shadow: var(--app-shadow-floating);
+}
+
+.panelBody {
+  padding: 0;
+  height: 100%;
+}
+
+.panelHeader {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--app-glass-border);
+}

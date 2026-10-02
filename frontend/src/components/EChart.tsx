@@ -1,6 +1,6 @@
 import { useComputedColorScheme } from "@mantine/core";
 import { useReducedMotion } from "framer-motion";
-import { BarChart, HeatmapChart, LineChart, ScatterChart } from "echarts/charts";
+import { BarChart, CustomChart, GaugeChart, HeatmapChart, LineChart, ScatterChart } from "echarts/charts";
 import {
   DatasetComponent,
   GridComponent,
@@ -18,10 +18,16 @@ import { ECHARTS_THEME, registerEchartsThemes } from "../theme/echartsTheme";
 
 // Import modulaire : seuls les graphiques et composants utilisés sont embarqués.
 echarts.use([
-  BarChart, LineChart, ScatterChart, HeatmapChart, GridComponent, TooltipComponent,
+  BarChart, LineChart, ScatterChart, HeatmapChart, GaugeChart, CustomChart, GridComponent, TooltipComponent,
   LegendComponent, MarkLineComponent, DatasetComponent, VisualMapComponent, CanvasRenderer,
 ]);
 registerEchartsThemes();
+
+// Développement uniquement : accès aux graphiques pour les tests de bout en bout (Playwright),
+// qui convertissent une modalité en coordonnées pixel pour cliquer dessus. Absent du build.
+if (import.meta.env.DEV) {
+  (window as unknown as { __echarts?: typeof echarts }).__echarts = echarts;
+}
 
 interface EChartProps {
   option: EChartsOption;

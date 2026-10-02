@@ -57,8 +57,11 @@ from churn.config import get_config
 from churn.data.split import load_test, load_train
 from churn.evaluation.cv import make_folds
 from churn.evaluation.metrics import lift_at_k, roc_auc
+from churn.explain.reason_codes import compute_outlier_thresholds, set_outlier_thresholds
 from churn.explain.shap_utils import ShapExplainer
+from churn.features.build import FeatureBuilder
 from churn.logging_setup import setup_logging
+from churn.models.model_card import write_model_card
 from churn.segmentation.kmeans import assign_segments
 
 logger = logging.getLogger("build_artifacts")
@@ -94,6 +97,15 @@ def main() -> int:
     # 1. Scores hors fold du train et explications par le modèle de chaque fold.
     train = load_train()
     y = train[target]
+    # Seuils des valeurs atypiques (quantile 99,9 %, train seul) pour les phrases des raisons.
+    outliers = compute_outlier_thresholds(
+        FeatureBuilder(groups=cfg.features.groups).transform(train))
+    set_outlier_thresholds(outliers)
+    cfg.paths.artifacts_dir.mkdir(parents=True, exist_ok=True)
+    (cfg.paths.artifacts_dir / "outlier_thresholds.json").write_text(
+        json.dumps(outliers, indent=1), encoding="utf-8")
+    logger.info("Seuils de valeurs atypiques : %d hauts, %d bas", len(outliers["high"]),
+                len(outliers["low"]))
     oof, fold_models = out_of_fold_scores(train, y, make_folds(y))
     logger.info("Scores hors fold : %.0f s", time.perf_counter() - start)
     parts = [explain_partition(raw_pipeline(m.calibrated), train.loc[m.valid_index])
@@ -220,6 +232,8 @@ def main() -> int:
           f"(High {100 * thresholds.capacity:.0f} %, High + Medium "
           f"{100 * thresholds.medium_end:.0f} % du portefeuille)")
     print(np.round(tiers, 4).to_string())
+    # Fiche du modèle complétée par les niveaux et le chiffre de campagne (kpis.json).
+    print(f"fiche  : {write_model_card(n_train=len(train))}")
     return 0
 
 

@@ -12,9 +12,11 @@ endif
 help:
 	@echo Cibles : install data train artifacts api front dev test check
 
+# Dépendances Python (dans .venv, à créer avant : python -m venv .venv) et frontend.
 install:
 	$(PYTHON) -m pip install -r requirements.txt
 	$(PYTHON) -m pip install -e .
+	cd frontend && npm ci
 
 # Nettoyage + split 80/20 -> data/processed/ (E3)
 data:
@@ -39,9 +41,11 @@ front:
 dev:
 	cd frontend && npm run dev:all
 
+# Tests Python + lint Python (ruff) + lint frontend (ESLint)
 test:
 	$(PYTHON) -m pytest -q
 	$(PYTHON) -m ruff check .
+	cd frontend && npm run lint
 
 # Vérification du setup (E1) : charge le CSV brut et affiche shape + value_counts
 check:

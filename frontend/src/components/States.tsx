@@ -71,3 +71,18 @@ export function SkeletonKpiRow({ count = 4 }: { count?: number }) {
     </SimpleGrid>
   );
 }
+
+/** Squelette d'une page pendant le chargement de son code. */
+export function PageSkeleton() {
+  return (
+    <Stack gap="lg">
+      <Stack gap={8}>
+        <Skeleton height={12} width={140} />
+        <Skeleton height={30} width="55%" />
+        <Skeleton height={14} width="40%" />
+      </Stack>
+      <SkeletonKpiRow count={4} />
+      <Skeleton height={280} radius="lg" />
+    </Stack>
+  );
+}

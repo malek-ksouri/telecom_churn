@@ -1107,3 +1107,364 @@ Aucune décision n'a dépendu du test.
 - Pas de version mobile travaillée : l'application cible un écran de bureau (1440 px). En dessous de 768 px, la barre latérale se replie mais la barre de filtres défile horizontalement.
 
 **Étape suivante** : E15 — pages Segments et facteurs, Simulateur, Clients à risque (AG Grid, fiche client) ; puis E17 (chat).
+
+## Bilan — Étape 15a : Pages Pilotage (Vue d'ensemble, Segments et facteurs, Simulateur)
+
+**Fait** :
+- **Vue d'ensemble** :
+  - titre-conclusion (« 2 002 départs attendus le mois prochain, 116 162 $ de revenu mensuel en jeu ») ;
+  - 5 KPI : clients (base), départs (estimation), revenu en jeu (estimation), clients High (base et estimation), campagne officielle 51 / 1 000 contre 20 ;
+  - répartition par niveau ;
+  - histogramme des probabilités avec les seuils High (3,7 %) et Medium (2,3 %) ;
+  - tableau des capacités 5 / 10 / 20 % ;
+  - encart « Ce qu'il faut retenir » (API `/summary`, mode démo, avec squelette).
+- **Segments et facteurs** :
+  - barres du risque par modalité, pour 6 dimensions au choix ;
+  - heatmap ancienneté × âge du terminal ;
+  - importance SHAP en deux blocs, actionnables et contexte (variables sensibles masquées et signalées) ;
+  - 5 cartes de profils K-means (taille, risque, part de High, revenu en jeu, 3 traits, action la plus fréquente) ;
+  - tous ces visuels sont cliquables (drill-down).
+- **Simulateur** :
+  - panneau « Hypothèses » : capacité 1-50 %, taux de succès 0-50 %, horizon 1-24 mois (12 par défaut), coût optionnel ;
+  - 8 résultats animés en deux groupes : « Résultats du modèle », et « Selon vos hypothèses » en pointillés ;
+  - courbe de gain avec le point courant, courbe du solde si un coût est saisi (avec le maximum en titre) ;
+  - bloc « Inactifs » séparé ;
+  - conclusion dynamique.
+- **API** : revenu préservé sur l'horizon, endpoint `/segments/profiles`, indicateur `sensitive` ; 3 tests ajoutés.
+- **Frontend** :
+  - filtres étendus aux 7 dimensions ;
+  - options ECharts centralisées (`src/charts/options.ts`) ;
+  - pages chargées à la demande ;
+  - poignées des curseurs accessibles (`thumbLabel`).
+- **Tests de bout en bout** : `frontend/scripts/e2e_pilotage.py` (16 vérifications).
+- **Lanceur de l'API** : il arrête désormais tout l'arbre de processus, sans worker uvicorn orphelin sur le port 8000.
+
+**Fichiers** :
+- Créés : `frontend/src/pages/{SegmentsPage,SimulatorPage}.tsx` et leurs `.module.css`, `frontend/src/charts/options.ts`, `frontend/src/components/SummaryCard.tsx`, `frontend/scripts/e2e_pilotage.py`
+- Modifiés :
+  - frontend : `OverviewPage.tsx`, `PageHeader`, `KpiCard` (natures « hypothèse », compact, « — »), `EChart`, `States`, `ActiveFilterChips`, `filterLabels`, `format.ts`, `api/{types,queries,schema.d.ts}`, `store/filters.ts`, `Header.tsx`, `App.tsx`, `scripts/run-api.mjs` ;
+  - backend : `src/churn/services/{analytics,campaign,__init__}.py`, `src/churn/business/actions.py`, `src/churn/assistant/tools.py`, `api/{schemas.py,routers/segments.py,routers/campaign.py}`, `tests/test_api.py`, `docs/decisions.md`.
+
+**Résultats clés** :
+- **Drill-down de bout en bout** (Playwright, clics réels dans les graphiques) :
+  - clic sur la barre « 11-12 mois » → `tenure_band` dans l'URL et une puce ; le titre passe de 116 162 $ à 21 222 $ ; les facteurs sont recalculés (la fin d'engagement passe en tête) ;
+  - clic sur une case de la heatmap → 2 filtres ;
+  - clic sur un profil → filtre de segment ;
+  - la vue d'ensemble reprend les filtres (2 002 → 31 départs attendus) ;
+  - Retour → dernier filtre retiré.
+- **Simulateur** (curseurs au clavier) :
+  - 10 % → 511 churners ; 20 % → 831 (facteur 2,1) ;
+  - succès 0 % → « aucun départ n'est évité », carte à 0 ;
+  - horizon 24 mois et coût 5 $ → 166 départs évités, 234 341 $ préservés, solde de 134 336 $ (vérifié : 234 341 − 5 × 20 001) ;
+  - graphique du solde affiché.
+- **16 vérifications sur 16**, sans erreur JavaScript.
+- **Captures** des 3 pages en clair et en sombre, avec 12 défauts corrigés au fil des itérations, parmi lesquels :
+  - libellés tronqués ;
+  - étiquettes de seuils verticales illisibles ;
+  - texte blanc sur les cases rose clair de la heatmap en sombre ;
+  - point courant invisible sur les courbes ;
+  - « — » au lieu d'un squelette pour un coût non saisi ;
+  - puces de filtres sur deux lignes ;
+  - « 18 / % » coupé en fin de ligne ;
+  - flèches de traits colorées comme des niveaux de risque (elles sont maintenant neutres).
+- **Build** : pages de 10 à 14 ko ; bundle principal de 115 ko compressés (165 ko en E14). Le crochet de test ECharts est absent du build de production.
+- **Qualité** : ESLint propre ; ruff OK ; pytest : 148 passed.
+
+**Décisions et justification** : D106 à D109 dans `docs/decisions.md`.
+
+**À savoir défendre à l'oral** :
+- *Pourquoi un graphique ne se filtre-t-il pas sur sa propre dimension ?* Pour garder la comparaison visible : on voit la modalité choisie parmi les autres, et on peut la désélectionner d'un clic. Tous les autres chiffres, eux, suivent le filtre.
+- *Comment distinguer ce que dit le modèle de ce que suppose l'utilisateur ?* Deux groupes de cartes : « Résultats du modèle » et « Selon vos hypothèses », en pointillés. La conclusion ne donne des départs évités qu'avec le taux de succès saisi, et le coût et le solde n'existent que si un coût est saisi.
+- *Pourquoi le solde devient-il positif ?* Parce que l'horizon de 12 à 24 mois multiplie le revenu préservé. À 1 mois, la même campagne est déficitaire : c'est l'hypothèse la plus sensible, d'où son curseur dédié.
+
+**Limites / points ouverts** :
+- L'encart « Ce qu'il faut retenir » affiche le résumé en mode démo (global, non filtré, signalé comme tel) ; le branchement sur l'assistant et sa version filtrée sont prévus en E17.
+- Les paramètres du simulateur ne sont pas dans l'URL : une simulation ne se partage pas par lien.
+- La heatmap est fixe (ancienneté × âge du terminal) ; d'autres croisements sont possibles côté API.
+- Le chunk ECharts reste lourd (213 ko compressés), chargé à la première page avec un graphique.
+- Captures et tests de bout en bout en résolution bureau (1440 px) uniquement.
+
+**Étape suivante** : E15b — Clients à risque (table AG Grid paginée côté serveur, fiche client avec cascade SHAP) ; puis E17 (chat).
+
+## Bilan — Étape 15b : Pages Opérations (Clients à risque et fiche client)
+
+**Fait** :
+- **Clients à risque** :
+  - table AG Grid paginée côté serveur ; colonnes identifiant, niveau (badge), risque mensuel (barre fine), raison principale, action, facture, revenu en jeu, profil ;
+  - tri serveur, recherche par identifiant, filtres niveau / région / segment (en-tête) et action (barre d'outils) ;
+  - titre avec le nombre de clients dans la base et l'équivalent portefeuille ;
+  - export CSV de la sélection filtrée ;
+  - bouton « Voir les inactifs » ; état complet de la liste dans l'URL.
+- **Fiche client** (tiroir latéral vitré, URL `?client=`) :
+  - identifiant et niveau ; jauge du risque mensuel ; probabilité calibrée en information secondaire ;
+  - 3 raisons actionnables avec contribution, contexte en gris ;
+  - cascade SHAP ; action mise en avant ; boutons « Expliquer » et « Rédiger une offre » réservés (E17) ;
+  - profil ; précédent / suivant (boutons, flèches ←/→, passage à la page suivante) ; fermeture par Échap.
+- **API** : `GET /api/customers/export` (CSV) et un test.
+- **Explicabilité** : 21 nouvelles phrases métier pour les raisons ; artefacts reconstruits (mêmes scores, mêmes niveaux).
+- **Tests de bout en bout** : `frontend/scripts/e2e_operations.py` (15 vérifications).
+
+**Fichiers** :
+- Créés : `frontend/src/pages/CustomersPage.{tsx,module.css}`, `frontend/src/components/customer/CustomerDrawer.{tsx,module.css}`, `frontend/src/charts/customer.ts`, `frontend/src/lib/agGrid.ts`, `frontend/scripts/e2e_operations.py`
+- Modifiés :
+  - frontend : `api/{queries.ts,schema.d.ts}`, `components/EChart.tsx` (jauge, séries custom), `App.tsx` ;
+  - backend : `src/churn/services/{customers,__init__}.py`, `api/routers/customers.py`, `src/churn/explain/reason_codes.py`, `tests/{test_api,test_explain}.py`, `artifacts/*`, `docs/decisions.md`.
+
+**Résultats clés** :
+- **Liste** : 98 028 clients actifs à fidéliser dans la base, soit un équivalent portefeuille d'environ 99 087 ; 1 972 inactifs à part.
+- **Tests de bout en bout de la page** (15/15) :
+  - 25 lignes triées par risque ;
+  - tri par facture en décroissant (3 843 $ en tête) ;
+  - recherche « 10729 » ;
+  - filtre action ;
+  - export CSV : 10 487 lignes, identiques à la table ;
+  - « Voir les inactifs » ;
+  - clic sur une ligne : fiche ouverte et URL mise à jour ;
+  - suivant, flèche ←, Échap ;
+  - suivant en fin de page : page 2, premier client.
+- **Pages Pilotage** : 16/16, toujours vertes.
+- **Captures** de la table et de 3 fiches (High 1072931, Low 1039171, Inactif 1050755) en clair et en sombre. 9 défauts corrigés :
+  - capture bloquée sur le squelette (rechargement de Vite au premier chargement d'AG Grid) ;
+  - anneau de focus sur « Fermer » à l'ouverture ;
+  - graduations de la jauge contre l'arc, puis contre la valeur ;
+  - table plus large que la carte ;
+  - région en majuscules brutes ;
+  - « 1 lignes », « 1 ans » ;
+  - titre « Pourquoi ce client est à risque » pour un client Low ;
+  - 22 % des raisons sans unité ni sens.
+- **Qualité** : `npm run build` sans erreur ; ESLint propre ; ruff OK ; pytest : 150 passed.
+
+**Décisions et justification** : D110 à D112 dans `docs/decisions.md`.
+
+**À savoir défendre à l'oral** :
+- *Pourquoi les inactifs ne sont-ils pas dans la liste par défaut ?* Un client sans aucune minute d'appel est probablement déjà parti : lui envoyer une offre de fidélisation gaspille le budget. On le traite à part (vérifier la ligne, reconquête), et un bouton le rend visible en un clic.
+- *Comment lire la cascade ?* Elle part du score moyen du modèle. Chaque barre rouge pousse le score du client vers le risque, chaque barre bleue l'en éloigne ; la somme donne son score. Celui-ci devient une probabilité, puis est calibré et ramené au taux réel supposé : 6,4 % par mois pour le client 1072931. Ce sont des associations apprises, pas des causes.
+- *Pourquoi la pagination côté serveur ?* 98 000 lignes ne doivent pas transiter vers le navigateur : chaque page (25 à 100 lignes) est calculée par l'API en quelques dizaines de millisecondes, tri et filtres compris.
+
+**Limites / points ouverts** :
+- Boutons IA de la fiche désactivés : branchement à l'étape E17 (endpoints déjà prêts en mode démo).
+- Colonnes niveau, action et profil non triables (le tri serveur porte sur les champs numériques).
+- Module AG Grid lourd (325 ko compressés, tous modules Community enregistrés), chargé seulement sur cette page ; à réduire en n'enregistrant que les modules utilisés.
+- Un arrêt forcé de `dev:all` (hors Ctrl+C) peut laisser un worker uvicorn sur le port 8000 ; le lanceur arrête tout l'arbre sur un signal normal.
+- Quelques valeurs extrêmes restent affichées telles quelles dans les raisons (ex. 3 685 appels en itinérance par mois) : elles viennent des données.
+
+**Étape suivante** : E17 — interface de chat de l'assistant (streaming SSE, outils appelés et avertissements affichés), branchement des boutons « Expliquer » et « Rédiger une offre », et de l'encart « Ce qu'il faut retenir ».
+
+### Complément avant E17 : valeurs atypiques dans les raisons (D113)
+
+- Mention « (valeur atypique, à vérifier) » ajoutée à une raison quand la valeur affichée dépasse le quantile 99,9 % de sa variable, calculé sur le train (82 seuils, `artifacts/outlier_thresholds.json`).
+- Artefacts reconstruits. Contrôle avant / après : scores, niveaux, actions, ordre des raisons et contributions SHAP identiques ; la mention est la seule différence.
+- 611 raisons marquées sur 300 000 (0,20 %), chez 558 clients. Variables les plus concernées : évolution de la facture, âge du terminal, appels coupés ou bloqués.
+- Exemple, client 1039171 : « Appels en itinérance : 3 685,2 par mois (valeur atypique, à vérifier) », pour un seuil de 88,9.
+- Seuil bas ajouté ensuite (quantile 0,1 % du train) pour les variables pouvant être négatives et les ratios de baisse : `change_mou` (−1 750), `change_rev` (−233), `ratio_rev_3m_6m` (0,17), `ratio_mou_3m_6m` (0 : ne marque rien, un usage récent nul n'étant pas rare). Nouveau contrôle avant / après : seules les phrases changent. 90 raisons de plus marquées, presque toutes des fortes baisses d'usage (« Usage en baisse de 2 239 minutes par mois ») ; au total 701 raisons (0,23 %), 635 clients.
+- Tests : 1 test ajouté (mention, valeur comparée, ordre inchangé) ; pytest et ruff verts.
+
+## Bilan — Étape 17 : Assistant dans l'interface, fonctions IA et finitions
+
+**Fait** :
+- **Assistant** :
+  - page Assistant : chat en streaming (SSE), réponses en markdown, 5 questions suggérées, Stop, « Nouvelle conversation » ;
+  - encart repliable « Outils utilisés » (nom, paramètres, durée), avertissements des garde-fous, badge Gemini / démo ;
+  - identifiants clients cliquables, qui ouvrent la fiche ;
+  - panneau latéral vitré accessible depuis toutes les pages, même conversation que la page ;
+  - colonne d'état (fournisseur, raison du mode démo, règles de l'assistant).
+- **Fonctions IA ailleurs** : encart « Ce qu'il faut retenir » de la Vue d'ensemble branché sur `/api/summary` ; dans la fiche client, boutons « Expliquer » et « Rédiger une offre » (SMS et email copiables, compteur de caractères, états de chargement).
+- **Erreurs** : quota, clé invalide ou indisponibilité → message, puis bascule en mode démo ; clé absente → mode démo au démarrage, raison affichée.
+- **Finitions** : barre latérale repliée d'office sous 1 100 px, badges courts sur écran étroit, grille KPI à 3 ou 5 colonnes, séparateur des milliers lisible, focus clavier visible, états vides et d'erreur.
+- **Parcours de démo** de 3 minutes écrit dans `docs/demo_script.md` (narration, chiffres, plan A / plan B, questions de secours) et joué de bout en bout par script.
+
+**Fichiers** :
+- Frontend :
+  - nouveaux : `src/api/chat.ts`, `src/store/chat.ts`, `src/store/customerNav.ts`, `src/components/chat/` (`ChatThread`, `MessageView`, `ChatPanel`, CSS), `src/components/customer/AiAssist.tsx` et `GlobalCustomerDrawer.tsx`, `src/pages/AssistantPage.tsx`, `src/lib/chatSuggestions.ts` ;
+  - modifiés : `AppLayout`, `Header`, `Navbar`, `store/ui.ts`, `Badges`, `ActiveFilterChips`, `OverviewPage`, `CustomersPage`, `CustomerDrawer`, `lib/format.ts`, `App.tsx` ;
+  - supprimé : `PlaceholderPage`.
+- Backend : `src/churn/assistant/llm_client.py` (mots-clés du mode démo).
+- Tests : `tests/test_assistant.py` (questions suggérées, plan B sans clé) ; `frontend/scripts/demo_parcours.py`.
+- Documentation et captures : `docs/demo_script.md` ; `frontend/screenshots/demo/` (8 étapes × 2 thèmes) ; `frontend/screenshots/responsive/` (5 pages × 4 tailles).
+
+**Résultats clés** :
+- Parcours de démo : **21/21 vérifications**, en clair et en sombre, sur deux passages consécutifs ; 22 s automatisées par thème.
+- Chiffres du parcours :
+  - 2 002 départs attendus, 116 162 $ en jeu ;
+  - fin d'engagement : 3,51 % de risque mensuel, 1,8 fois la moyenne ;
+  - simulateur (10 %, 20 %, 12 mois) : 511 churners contre 200 au hasard (× 2,55) ; sous hypothèse, 102 départs évités et 72 143 $ ;
+  - client 1072931 : 6,4 % de risque ; SMS de 179 caractères sur 300 ;
+  - l'assistant redonne 511 et 200, avec l'hypothèse annoncée.
+- Non-régression : e2e Pilotage 16/16, e2e Opérations 15/15.
+- Responsive : aucun débordement horizontal sur 20 combinaisons (5 pages × 4 tailles).
+- Qualité :
+  - `npm run build` sans erreur ; pages de 3,5 à 13,7 ko (1,6 à 4,7 ko compressées) ;
+  - ESLint propre, ruff OK ;
+  - pytest : **157 passed**, dont 31 pour l'assistant.
+- Aucun appel Gemini pendant l'étape (`LLM_PROVIDER=demo`).
+
+**Décisions et justification** : D114 à D119 dans `docs/decisions.md`.
+
+**À savoir défendre à l'oral** :
+- *Comment savez-vous que l'assistant n'invente pas de chiffres ?* Il ne calcule rien : il appelle des outils qui lisent les artefacts. L'encart « Outils utilisés » montre chaque appel. Un garde-fou vérifie ensuite que chaque nombre de la réponse figure dans les résultats d'outils ; sinon, un avertissement s'affiche.
+- *Que se passe-t-il si Gemini tombe pendant la soutenance ?* L'assistant bascule automatiquement en mode démonstration : mêmes outils, donc mêmes chiffres ; seul le style de rédaction change. Sans clé, l'application démarre directement dans ce mode.
+- *Pourquoi le streaming ?* L'utilisateur voit la réponse se construire et les outils s'appeler au fil de l'eau, au lieu d'attendre plusieurs secondes devant un écran figé.
+
+**Limites / points ouverts** :
+- **Parcours pas encore joué avec Gemini** : à faire avant la soutenance (initialement prévu jeudi soir), avec l'accord de Malek (environ 3 requêtes par passage, quota de 20 par jour). Le style des réponses variera ; les chiffres doivent rester ceux des outils.
+- Choix final du modèle (3.8-flash ou 3.5-flash-lite) à trancher au même moment.
+- Le bundle principal pèse 557 ko (174 ko compressés) : il inclut le panneau de chat, le markdown et la fiche, présents sur toutes les pages. ECharts (221 ko compressés) est chargé à part.
+- En tablette portrait, la table des clients défile horizontalement dans sa carte : choix assumé, pour garder des colonnes lisibles.
+- Le mode démo suit des scénarios fixes : une question hors scénario reçoit une réponse générique.
+
+**Étape suivante** : avec l'accord de Malek, évaluation Gemini complète (15 questions et parcours de démo) et choix du modèle ; puis préparation du rendu final.
+
+---
+
+# Bilan de partie — D : Frontend et assistant IA (E14 à E17)
+
+## 1. Avancement par rapport au planning
+
+| Étape | Prévu | Réalisé | Statut |
+|---|---|---|---|
+| E14 Squelette du frontend et design system | Jeu 01/10 | 30/09 | En avance |
+| E15a Pages Pilotage (Vue d'ensemble, Segments, Simulateur) | Jeu 01/10 | 30/09 | En avance |
+| E15b Pages Opérations (Clients à risque, fiche client) | Jeu 01/10 | 30/09 | En avance |
+| E16 Assistant IA (backend) | Jeu 01/10 | 30/09 | En avance (fait avant E14) |
+| E17 Assistant dans l'interface, fonctions IA, finitions, parcours de démo | Jeu 01/10 | 01/10 ; test Gemini le 02/10 au matin | Dans les temps |
+
+**Verdict : partie D terminée la veille du rendu.** L'application complète tourne en mode démonstration, testée de bout en bout. Le seul écart au plan est l'évaluation Gemini : partielle, car limitée par le quota gratuit, puis close par un test unique le 02/10 (D120).
+
+Ce qui a coûté du temps :
+- les écarts d'API des versions récentes (Mantine 9, AG Grid 36, Vite 8), découverts à l'exécution ;
+- le quota Gemini (20 requêtes par jour), épuisé le 30/09 par des diagnostics ;
+- les workers uvicorn orphelins sous Windows, qui gardaient le port 8000 et servaient d'anciens artefacts ;
+- les itérations sur captures : une cinquantaine de défauts visuels repérés et corrigés sur l'ensemble de la partie.
+
+## 2. Chiffres clés consolidés
+
+**E14 — Squelette et design system**
+- Palette de risque validée par calcul : 2 palettes rejetées (feu tricolore : écart daltonien 6,0 ; violet contre bleu : 0,5), la troisième passe tous les contrôles dans les deux thèmes.
+- Filtres synchronisés avec l'URL : lien partageable, bouton Retour fonctionnel.
+- 8 défauts corrigés sur captures.
+
+**E15a — Pages Pilotage**
+- Drill-down de bout en bout : un clic sur « 11-12 mois » fait passer le revenu en jeu du périmètre de 116 162 $ à 21 222 $, et la fin d'engagement passe en tête des facteurs.
+- Simulateur vérifié au clavier (exemple : horizon 24 mois, coût 5 $ → solde de 134 336 $, recalculé à la main).
+- e2e : 16/16.
+
+**E15b — Pages Opérations**
+- 98 028 clients actifs à fidéliser dans la base (environ 99 087 en estimation portefeuille) ; 1 972 inactifs à part.
+- Export CSV identique à la table (10 487 lignes dans le cas testé).
+- Part des raisons sans phrase métier : 22,2 % → 0,8 % (D112) ; valeurs atypiques signalées (D113, 701 raisons sur 300 000).
+- e2e : 15/15.
+
+**E16 — Assistant (backend)**
+- 8 outils, boucle de 5 appels au plus, garde-fous sur les nombres et les termes sensibles, 5 endpoints (dont le chat en SSE).
+- Évaluation : voir la section 4.
+
+**E17 — Interface de l'assistant et finitions**
+- Chat en streaming (page et panneau partagés), boutons « Expliquer » et « Rédiger une offre », encart « Ce qu'il faut retenir ».
+- Parcours de démo de 3 minutes : 21/21, en clair et en sombre.
+- Responsive : aucun débordement sur 20 combinaisons (5 pages × 4 tailles).
+
+**État final de la qualité**
+- pytest : **157 passed** ; ruff : OK.
+- ESLint propre ; `npm run build` sans erreur.
+- e2e : Pilotage 16/16, Opérations 15/15, parcours de démo 21/21.
+
+## 3. Captures d'écran principales
+
+Les captures de `demo/` et `responsive/` reflètent l'état final. Celles de la racine datent de E14 à E15b, avant les corrections de D117 (responsive) et D118 (séparateur des milliers) : pour les supports de soutenance, utiliser `demo/`.
+
+| Écran | Chemin (sous `frontend/screenshots/`) |
+|---|---|
+| Vue d'ensemble | `demo/01_vue-ensemble_{light,dark}.png` |
+| Drill-down « fin d'engagement » | `demo/02_drilldown-fin-engagement_{light,dark}.png` |
+| Simulateur (10 %, 20 %, 12 mois) | `demo/03_simulateur_{light,dark}.png` |
+| Clients à risque | `demo/04_clients-a-risque_{light,dark}.png` |
+| Fiche d'un client High (1072931) | `demo/05_fiche-high_{light,dark}.png` |
+| « Expliquer » | `demo/06_fiche-expliquer_{light,dark}.png` |
+| « Rédiger une offre » (SMS et email) | `demo/07_fiche-offre_{light,dark}.png` |
+| Assistant (panneau latéral, outils utilisés) | `demo/08_assistant_{light,dark}.png` |
+| Responsive (portable, grand écran, tablettes) | `responsive/<page>_{portable,grand,tablette-paysage,tablette-portrait}.png` |
+| Fiches Low et Inactif | `fiche_low_{light,dark}.png`, `fiche_inactif_{light,dark}.png` |
+| États de chargement et d'erreur | `etat_chargement_dark.png`, `etat_erreur_light.png` |
+| Simulateur avec coût saisi (solde) | `simulateur_cout_light.png` |
+
+## 4. Résultats de l'évaluation de l'assistant
+
+**Protocole** (`docs/assistant_eval.md`) : 15 questions (6 factuelles, 4 explications, 3 hors périmètre, 2 pièges), deux scores par réponse :
+- **routage** : le bon outil, aucun outil inutile, et un refus pour le hors périmètre ;
+- **fidélité des chiffres** : aucun nombre signalé par les garde-fous.
+
+| Fournisseur | Questions évaluées | Routage | Fidélité des chiffres |
+|---|---|---|---|
+| Mode démonstration | 15 / 15 | **15/15** | **15/15** |
+| Gemini `gemini-3.8-flash` (30/09) | 3 / 15 (F2, F3, F6) | 3/3 | 2/3 mesurée, 3/3 après correction de l'outil |
+
+Le seul écart de fidélité de Gemini est utile : le garde-fou a signalé « 100 000 », un nombre absent des résultats d'outil. L'outil renvoie désormais la taille du portefeuille de référence. Les 12 autres questions n'ont pas pu être posées (quota épuisé, erreurs 429 et 503).
+
+**Test du jour de la soutenance (02/10, D120, `docs/gemini_trace.md`)** :
+
+| Modèle | Question | Résultat | Temps | Requêtes |
+|---|---|---|---|---|
+| gemini-3.8-flash | « Combien de clients sont classés High ? » | échec : 503 au premier essai et aux 2 réessais | 17,5 s | 3 |
+| gemini-3.5-flash-lite | idem | réponse juste (`get_kpis` ; 17 472 clients dans la base, environ 9 876 en estimation portefeuille, 29 762 $) | 10,3 s | 2 |
+
+**Conclusion** : quand Gemini répond, il route bien et ne fabrique pas de chiffre (4 réponses sur 4, dont une après correction de l'outil). Mais il est lent (10 à 35 s) et pas toujours disponible. La soutenance se fait donc en **mode démonstration** : mêmes outils, mêmes chiffres, rédaction fixe. L'échantillon Gemini (4 questions) est trop petit pour conclure sur les explications, les refus et les pièges.
+
+## 5. Décisions prises (D96 à D120)
+
+| Thème | Décisions | En une phrase |
+|---|---|---|
+| Assistant (backend) | D96-D100 | Gemini par `.env` seulement ; outils qui enveloppent les services et filtrent les variables sensibles ; boucle maison de 5 outils au plus, garde-fous chiffrés ; bascule en démo sur erreur ; textes dédiés sur données fixées par le code |
+| Design system | D101-D105 | Couleurs de risque validées par calcul (jamais seules) ; accent vert canard ; TypeScript strict et types générés depuis l'OpenAPI ; filtres dans l'URL ; verre seulement sur les surfaces flottantes |
+| Pilotage | D106-D109 | Drill-down par filtres globaux ; titres-conclusions recalculés ; nature de chaque chiffre affichée, bordure pointillée pour les hypothèses ; règles de visualisation |
+| Opérations | D110-D113 | Inactifs exclus de la liste par défaut ; pagination et export côté serveur ; fiche en tiroir ; phrases métier ; valeurs atypiques signalées |
+| Assistant (interface) et finitions | D114-D119 | Conversation partagée page / panneau ; fiche ouverte par l'URL ; erreurs → bascule en démo ; responsive ; séparateur des milliers lisible ; parcours de démo scripté |
+| Choix du fournisseur | D120 | Soutenance en mode démonstration après un test unique : Gemini trop lent ou indisponible |
+
+## 6. Ce qui reste fragile avant la démo
+
+| Point fragile | Ce qui peut arriver | Parade |
+|---|---|---|
+| **Questions libres du jury en mode démo** | Le mode démo reconnaît des formulations proches du scénario : une question imprévue reçoit une réponse générique ou « hors périmètre » | S'en tenir aux 5 questions suggérées et aux questions de secours de `docs/demo_script.md` ; si le jury improvise, l'assumer : « en démo, la rédaction est fixe ; avec Gemini, la même question passe par les mêmes outils » |
+| **Port 8000 occupé par un ancien worker** (Windows) | L'API sert d'anciennes données, ou ne démarre pas | Arrêter `dev:all` par Ctrl+C ; avant la séance, vérifier `http://localhost:8000/api/health` et libérer les ports 8000 et 5173 |
+| **Premier chargement lent en mode développement** | Squelettes visibles plusieurs secondes au premier affichage (Vite compile ECharts et AG Grid à la demande) | Ouvrir chaque page une fois avant le passage du jury |
+| **Artefacts reconstruits pendant que l'API tourne** | Données en cache périmées | Ne pas lancer `make artifacts` le jour J ; sinon, redémarrer l'API |
+| **Profil client envoyé au LLM non arrondi** (« 29.98999023 $ », « 0.333333333 appels / mois », « 1 lignes ») | Sans effet en mode démo ; avec Gemini, ces valeurs brutes pourraient être recopiées | À arrondir dans l'outil `get_customer` après la soutenance ; sans incidence sur la démo actuelle |
+| **Garde-fous limités aux nombres** | Une tournure causale (« à cause de ») ne serait pas détectée | Interdite par le prompt ; les textes du mode démo disent « selon le modèle » |
+| **Évaluation Gemini partielle** (4 questions) | Impossible d'affirmer que Gemini gère bien les pièges et les refus | Le dire franchement ; les chiffres viennent des mêmes outils dans les deux modes |
+| **Anciennes captures** à la racine de `frontend/screenshots/` | Affichent l'ancien format des nombres (« 116162$ ») | N'utiliser que `demo/` et `responsive/` dans les supports |
+
+## 7. Questions d'oral probables
+
+1. **Le LLM est-il fiable ? Comment savez-vous qu'il n'invente pas de chiffres ?**
+   - Il ne calcule rien : il choisit un outil, et l'outil lit les artefacts du modèle (les mêmes que le tableau de bord). Les outils sont visibles dans l'encart « Outils utilisés ».
+   - Chaque nombre de la réponse est comparé après coup aux résultats d'outils ; un écart affiche un avertissement. Ce contrôle a repéré un vrai trou lors d'un essai réel (le « 100 000 » de F6).
+   - Mesures : 15/15 en routage et en fidélité en mode démo ; avec Gemini, 4 réponses sur 4 justes, dont une après correction de l'outil, mais sur un échantillon trop petit pour conclure.
+   - Limite assumée : la disponibilité et la latence. Gemini n'a pas répondu en moins de 10 s le jour de la soutenance, d'où le mode démonstration (D120).
+
+2. **Quelles données sont envoyées à Gemini ?**
+   - Le prompt système, la question, les 10 derniers messages de la conversation et la description des outils.
+   - Les **résultats d'outils**, qui sont déjà réduits : des agrégats (KPI, segments, campagne) et, pour une question sur un client, son identifiant, son niveau, son risque, ses raisons et quelques variables de profil (usage, ancienneté, terminal, facture, classe de crédit, région).
+   - **Jamais** : les variables socio-démographiques sensibles (retirées dans les outils, avant le LLM), ni la clé API, qui reste dans `.env` côté serveur. Le jeu de données ne contient ni nom ni coordonnées.
+   - En entreprise, il faudrait aller plus loin. Les conditions du niveau gratuit permettent au fournisseur de réutiliser les contenus (à vérifier dans les conditions en vigueur). Il faudrait donc une offre payante avec un contrat de traitement des données, voire un modèle hébergé en interne.
+
+3. **Pourquoi un assistant à outils, plutôt qu'un LLM qui lit les données ou écrit du SQL ?**
+   - Les chiffres de l'assistant sont **exactement** ceux du tableau de bord : même code (`churn.services`), aucune divergence possible.
+   - Chaque réponse est traçable : on voit quel outil a été appelé, avec quels paramètres et en combien de temps.
+   - Les règles métier sont appliquées une seule fois, dans les outils : inactifs exclus, variables sensibles filtrées, hypothèses étiquetées.
+   - Le mode démonstration devient possible : il appelle les mêmes outils sans LLM, d'où un plan B qui donne les mêmes chiffres.
+   - Un LLM qui écrirait du SQL pourrait se tromper de calcul ou contourner ces règles, sans que l'on puisse le contrôler.
+
+4. **Pourquoi affichez-vous deux effectifs différents (17 472 et 9 876 clients High) ?**
+   - Le jeu de données contient 50 % de churners, contre environ 2 % par mois dans un vrai portefeuille (hypothèse). Les clients risqués y sont donc surreprésentés.
+   - `n_rows` = **clients dans la base** : ce qu'on liste, filtre et exporte (17 472 lignes High).
+   - `n_portfolio_equiv` = **estimation** pour un portefeuille réel de 100 000 clients au taux supposé de 2 % : chaque client porte un poids, et les High ne pèsent plus qu'environ 9 876.
+   - Chaque chiffre affiché porte sa nature (« clients dans la base » ou « estimation portefeuille »), dans l'interface comme dans l'assistant, pour qu'on ne présente jamais l'un pour l'autre.
+
+5. **Quelles hypothèses se cachent derrière le simulateur ?**
+   - **Mesuré par le modèle** : en contactant les 10 % de clients actifs les plus risqués, on atteint 511 futurs churners contre 200 au hasard (× 2,55), soit 51 pour 1 000.
+   - **Hypothèse de cadrage** : le taux de churn réel de 2 % par mois. Il fixe les montants absolus, pas le classement.
+   - **Hypothèses saisies par l'utilisateur** :
+     - le taux de succès de l'offre (20 % par défaut) : 102 départs évités = 511 × 20 % ;
+     - l'horizon (12 mois) : 72 143 $ = environ 6 012 $ de revenu mensuel préservé × 12, ce qui suppose qu'un client retenu reste 12 mois avec la même facture ;
+     - le coût par contact : sans coût saisi, aucun solde n'est affiché.
+   - À l'écran, les cartes qui dépendent d'une hypothèse ont une bordure pointillée. Le vrai taux de succès se mesure avec un groupe témoin. Les inactifs ne sont jamais ciblés par l'offre.

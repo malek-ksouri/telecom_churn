@@ -66,3 +66,63 @@ def test_phrases() -> None:
     assert describe("avg3mou", row).startswith("Usage en baisse de 32 %")
     assert describe("lor", row) == "Durée de résidence inconnue"
     assert describe("hnd_price", row) == "Terminal à 30 $"
+
+
+def test_phrases_for_frequent_reasons() -> None:
+    row = pd.Series({"change_rev": 12.4, "ratio_rev_3m_6m": 0.8, "avgqty": 127.4, "uniqsubs": 1,
+                     "refurb_new": "R", "hnd_webcap": "WC", "roam_Mean": 2.0, "lor": 1.0,
+                     "drop_blk_Mean": 3.5})
+    assert describe("change_rev", row) == "Facture en hausse de 12 $ par mois (3 derniers mois)"
+    assert describe("avg3rev", row).startswith("Facture en baisse de 20 %")
+    assert describe("avgqty", row) == "Appels depuis l'ouverture : 127 par mois"
+    assert describe("uniqsubs", row) == "1 ligne ouverte sur le compte"
+    assert describe("refurb_new", row) == "Terminal reconditionné"
+    assert describe("hnd_webcap", row) == "Terminal à accès web limité"
+    assert describe("lor", row) == "Durée de résidence : 1 an"
+    assert describe("drop_blk_Mean", row) == "Appels coupés ou bloqués : 3,5 par mois"
+
+
+def test_atypical_values_are_flagged_without_changing_order() -> None:
+    from churn.business.actions import explain_clients
+    from churn.explain.reason_codes import (
+        ATYPICAL_NOTE,
+        compute_outlier_thresholds,
+        set_outlier_thresholds,
+    )
+    from churn.explain.shap_utils import ShapResult
+
+    train = pd.DataFrame({"roam_Mean": np.arange(1001, dtype=float), "flag": [0, 1] * 500 + [0],
+                          "change_rev": np.arange(-500, 501, dtype=float)})
+    thresholds = compute_outlier_thresholds(train)
+    assert "flag" not in thresholds["high"]             # binaires ignorées
+    assert thresholds["high"]["roam_Mean"] == pytest.approx(999.0)
+    assert "roam_Mean" not in thresholds["low"]         # jamais négative : pas de seuil bas
+    assert thresholds["low"]["change_rev"] == pytest.approx(-499.0)
+
+    row = pd.Series({"roam_Mean": 3685.2, "ratio_mou_3m_6m": 9.0, "avgqty": 50.0})
+    try:
+        set_outlier_thresholds({"high": {"roam_Mean": 1000.0, "ratio_mou_3m_6m": 3.0,
+                                         "avgqty": 3000.0},
+                                "low": {"change_rev": -200.0, "ratio_rev_3m_6m": 0.2}})
+        expected = "Appels en itinérance : 3 685,2 par mois" + ATYPICAL_NOTE
+        assert describe("roam_Mean", row) == expected
+        assert describe("avg3mou", row).endswith(ATYPICAL_NOTE)   # valeur affichée : le ratio
+        assert not describe("avgqty", row).endswith(ATYPICAL_NOTE)
+        low = pd.Series({"change_rev": -350.0, "ratio_rev_3m_6m": 0.1})
+        assert describe("change_rev", low).endswith(ATYPICAL_NOTE)       # forte baisse
+        assert describe("avg3rev", low).endswith(ATYPICAL_NOTE)          # ratio très bas
+        assert not describe("change_rev", pd.Series({"change_rev": -50.0})).endswith(ATYPICAL_NOTE)
+
+        values = pd.DataFrame({"roam_Mean": [0.5], "avgqty": [0.3], "months": [0.1]})
+        features = pd.DataFrame({"roam_Mean": [3685.2], "avgqty": [50.0], "months": [30],
+                                 "in_contract_end": [0]})
+        result = ShapResult(values, features, 0.0)
+        flagged, _ = explain_clients(result)
+        set_outlier_thresholds({})
+        plain, _ = explain_clients(result)
+    finally:
+        set_outlier_thresholds({})
+    cols = ["raison_1_variable", "raison_2_variable", "raison_3_variable"]
+    assert flagged[cols].equals(plain[cols])             # même ordre des raisons
+    assert flagged.loc[0, "raison_1"] == plain.loc[0, "raison_1"] + ATYPICAL_NOTE
+    assert flagged.loc[0, "raison_2"] == plain.loc[0, "raison_2"]

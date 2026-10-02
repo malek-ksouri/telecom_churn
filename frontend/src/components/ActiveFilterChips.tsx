@@ -17,13 +17,13 @@ export function ActiveFilterChips() {
 
   if (count === 0) {
     return (
-      <Text size="xs" c="var(--app-text-muted)">
+      <Text size="xs" c="var(--app-text-muted)" visibleFrom="md" style={{ whiteSpace: "nowrap" }}>
         Aucun filtre : portefeuille entier
       </Text>
     );
   }
   return (
-    <Group gap={6} wrap="wrap">
+    <Group gap={6} wrap="nowrap">
       <AnimatePresence initial={false}>
         {GLOBAL_FILTER_KEYS.flatMap((key) =>
           filters[key].map((value) => (

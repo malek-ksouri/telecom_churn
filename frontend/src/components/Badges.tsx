@@ -82,7 +82,8 @@ export function HypothesisBadge() {
         rightSection={<IconInfoCircle size={13} stroke={1.8} />}
       >
         <Group gap={4} wrap="nowrap">
-          Hypothèse : taux réel 2 %/mois
+          <Text span inherit visibleFrom="lg">Hypothèse : taux réel 2 %/mois</Text>
+          <Text span inherit hiddenFrom="lg">Taux réel 2 %</Text>
         </Group>
       </Badge>
     </Tooltip>

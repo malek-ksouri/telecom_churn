@@ -22,9 +22,11 @@ from churn.assistant.llm_client import (  # noqa: E402
     DemoClient,
     LLMClient,
     LLMError,
+    LLMSettings,
     StreamChunk,
     ToolCall,
     ToolSpec,
+    make_client,
     match_scenario,
 )
 from churn.assistant.tools import SENSITIVE_VARIABLES, TOOLS, run_tool  # noqa: E402
@@ -196,6 +198,9 @@ def test_agent_without_fallback_reports_error() -> None:
     ("Que donnerait une campagne sur 10 % avec 20 % de succès ?", ["simulate_campaign"]),
     ("Combien de départs allons-nous éviter ?", ["get_kpis", "explain_method"]),
     ("Le modèle est-il fiable ? Quelle est son AUC ?", ["explain_method"]),
+    ("Quels clients cibler en priorité ?", ["list_at_risk"]),
+    ("Si je contacte 10 % des clients avec un taux de succès de 20 % ?", ["simulate_campaign"]),
+    ("Qu'est-ce que le lift ?", ["explain_method"]),
     ("Quelle est la météo demain ?", []),
     ("Les clients mariés partent-ils plus ?", []),
 ])
@@ -281,3 +286,15 @@ def test_summary_and_status(client) -> None:
     status = AssistantStatus.model_validate(client.get("/api/assistant/status").json())
     assert status.provider == "demo" and not status.live_llm
     assert status.max_tool_calls == 5
+
+
+@pytest.mark.parametrize(("settings", "reason"), [
+    (LLMSettings("gemini", "gemini-3.8-flash", 45, api_key=None), "clé API absente"),
+    (LLMSettings("gemini", None, 45, api_key="x"), "modèle non renseigné"),
+    (LLMSettings("demo", None, 45), "mode démonstration demandé"),
+])
+def test_plan_b_switches_to_demo_without_key(settings: LLMSettings, reason: str) -> None:
+    """Plan B de la soutenance : sans clé (ou sans modèle), l'assistant passe en mode démo."""
+    client, why = make_client(settings)
+    assert isinstance(client, DemoClient)
+    assert why is not None and reason in why

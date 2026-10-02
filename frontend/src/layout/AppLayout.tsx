@@ -2,8 +2,12 @@ import { AppShell } from "@mantine/core";
 import { motion, useReducedMotion } from "framer-motion";
 import { Outlet, useLocation } from "react-router-dom";
 
+import { ChatPanel } from "../components/chat/ChatPanel";
+import { GlobalCustomerDrawer } from "../components/customer/GlobalCustomerDrawer";
 import { useFiltersUrlSync } from "../store/filters";
-import { useUiStore } from "../store/ui";
+import { useMediaQuery } from "@mantine/hooks";
+
+import { NARROW_QUERY, useNavCollapsed } from "../store/ui";
 import { layout, motion as tokens } from "../theme/tokens";
 import { Header } from "./Header";
 import { Navbar } from "./Navbar";
@@ -16,7 +20,8 @@ const HEADER_HEIGHT = 112; // ligne titre (64, alignée sur le logo) + barre de 
  */
 export function AppLayout() {
   useFiltersUrlSync();
-  const collapsed = useUiStore((s) => s.navCollapsed);
+  const narrow = useMediaQuery(NARROW_QUERY);
+  const collapsed = useNavCollapsed(narrow);
   const { pathname } = useLocation();
   const reduce = useReducedMotion();
 
@@ -51,6 +56,8 @@ export function AppLayout() {
           <Outlet />
         </motion.div>
       </AppShell.Main>
+      <ChatPanel />
+      <GlobalCustomerDrawer />
     </AppShell>
   );
 }

@@ -23,8 +23,9 @@ def simulate(
     offer_cost: Annotated[float | None, Query(ge=0, description="Coût de l'offre par client "
                                               "contacté ($). Sans valeur : ni coût ni solde.")
                           ] = None,
-    revenue_horizon_months: Annotated[int, Query(ge=1, le=36, description="Mois de revenu "
-                                                 "préservé comptés dans le solde.")] = 1,
+    revenue_horizon_months: Annotated[int, Query(ge=1, le=36, description="HYPOTHÈSE : mois de "
+                                                 "revenu préservé comptés (revenu sur "
+                                                 "l'horizon et solde).")] = 1,
 ) -> dict:
     """Clients ciblés (actifs, par risque décroissant), churners attendus contre hasard, revenu
     en jeu ; départs évités et revenu préservé selon le taux de succès **supposé** ; coût et

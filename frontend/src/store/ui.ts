@@ -18,3 +18,11 @@ export const useUiStore = create<UiState>()(
     { name: "churn-ui" },
   ),
 );
+
+/** Écran étroit (tablette) : la barre latérale reste repliée pour laisser la place au contenu. */
+export const NARROW_QUERY = "(max-width: 1100px)";
+
+export function useNavCollapsed(narrow: boolean): boolean {
+  const collapsed = useUiStore((s) => s.navCollapsed);
+  return narrow || collapsed;
+}

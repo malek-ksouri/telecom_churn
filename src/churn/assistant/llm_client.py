@@ -487,7 +487,7 @@ SCENARIOS: list[Scenario] = [
         "taux reel", "lift", "methode")),
              lambda q: [ToolCall("explain_method", {"topic": _method_topic(q)})],
              _render_method),
-    Scenario("campaign", lambda q: "campagne" in q or "simul" in q or "capacite" in q,
+    Scenario("campaign", lambda q: any(w in q for w in ("campagne", "simul", "capacite", "succes")),
              lambda q: [ToolCall("simulate_campaign", {
                  "capacity_pct": (_percentages(q) or [10])[0],
                  "success_rate": ((_percentages(q)[1:] or [20])[0]) / 100})],
@@ -497,9 +497,9 @@ SCENARIOS: list[Scenario] = [
     Scenario("drivers", lambda q: "facteur" in q or "pourquoi les clients" in q
              or "raisons du churn" in q,
              lambda q: [ToolCall("global_drivers", {"top": 5})], _render_drivers),
-    Scenario("at_risk", lambda q: "risque" in q and any(w in q for w in (
-        "qui", "liste", "contacter", "priorit", "clients"))
-             and "situation" not in q,
+    Scenario("at_risk", lambda q: ("cibler" in q and "client" in q) or (
+        "risque" in q and any(w in q for w in ("qui", "liste", "contacter", "priorit", "clients"))
+        and "situation" not in q),
              lambda q: [ToolCall("list_at_risk", {"risk_level": ["High"], "limit": 5})],
              _render_at_risk),
     Scenario("overview", lambda q: any(w in q for w in (

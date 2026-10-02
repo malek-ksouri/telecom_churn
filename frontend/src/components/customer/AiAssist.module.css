@@ -1,0 +1,13 @@
+/* Textes produits par l'assistant : surface en relief, opaque, filet d'accent. */
+.result {
+  background: var(--app-raised);
+  border: 1px solid var(--app-border);
+  border-left: 3px solid var(--app-accent);
+}
+
+.message {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--app-surface);
+  border: 1px solid var(--app-border);
+}

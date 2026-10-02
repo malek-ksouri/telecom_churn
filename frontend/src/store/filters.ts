@@ -9,7 +9,10 @@ import { create } from "zustand";
 
 import { GLOBAL_FILTER_KEYS, type GlobalFilterKey, type GlobalFilters } from "../api/types";
 
-const EMPTY: GlobalFilters = { area: [], cluster: [], risk_level: [], tenure_band: [] };
+const EMPTY: GlobalFilters = {
+  risk_level: [], cluster: [], area: [], tenure_band: [], handset_age_band: [], usage_band: [],
+  action: [],
+};
 
 interface FiltersState {
   filters: GlobalFilters;

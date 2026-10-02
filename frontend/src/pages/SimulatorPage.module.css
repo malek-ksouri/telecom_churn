@@ -1,0 +1,38 @@
+.panel {
+  background: var(--app-surface);
+  box-shadow: var(--app-shadow-card);
+}
+
+.panelIcon,
+.inactiveIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+
+.panelIcon {
+  color: var(--app-accent-text);
+  background: color-mix(in srgb, var(--app-accent) 12%, transparent);
+}
+
+/* Le panneau d'hypothèses reste visible pendant qu'on lit les résultats (grand écran). */
+@media (min-width: $mantine-breakpoint-lg) {
+  .sticky {
+    position: sticky;
+    top: 128px;
+  }
+}
+
+.inactive {
+  background: var(--app-surface);
+  border-left: 3px solid var(--risk-inactif);
+}
+
+.inactiveIcon {
+  color: var(--risk-inactif-text);
+  background: var(--risk-inactif-soft);
+}

@@ -4,13 +4,16 @@ import {
 } from "@tabler/icons-react";
 import { NavLink as RouterLink, useLocation } from "react-router-dom";
 
-import { useUiStore } from "../store/ui";
+import { useMediaQuery } from "@mantine/hooks";
+
+import { NARROW_QUERY, useNavCollapsed, useUiStore } from "../store/ui";
 import classes from "./Navbar.module.css";
 import { NAV_GROUPS } from "./navigation";
 
 /** Barre latérale : 2 groupes (Pilotage, Opérations), repliable en icônes seules. */
 export function Navbar() {
-  const collapsed = useUiStore((s) => s.navCollapsed);
+  const narrow = useMediaQuery(NARROW_QUERY);
+  const collapsed = useNavCollapsed(narrow);
   const toggle = useUiStore((s) => s.toggleNav);
   const { search } = useLocation(); // les filtres suivent la navigation entre pages
 
@@ -66,6 +69,7 @@ export function Navbar() {
         ))}
       </Stack>
 
+      {!narrow && (
       <Group p="sm" justify={collapsed ? "center" : "flex-end"} className={classes.footer}>
         <Tooltip label={collapsed ? "Déplier la barre latérale" : "Replier la barre latérale"} position="right">
           <ActionIcon onClick={toggle} size="lg" aria-label={collapsed ? "Déplier la barre latérale" : "Replier la barre latérale"}>
@@ -73,6 +77,7 @@ export function Navbar() {
           </ActionIcon>
         </Tooltip>
       </Group>
+      )}
     </Stack>
   );
 }

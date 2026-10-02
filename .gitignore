@@ -24,6 +24,8 @@ frontend/dist/
 
 # Divers
 *.csv
+# Résultats légers des notebooks (lus par la fiche du modèle) : versionnés
+!reports/*.csv
 Thumbs.db
 .vscode/
 CLAUDE.md

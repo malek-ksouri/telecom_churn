@@ -17,7 +17,7 @@
     {
      "name": "get_kpis",
      "args": {},
-     "ms": 769.8
+     "ms": 943.0
     }
    ],
    "answer": "**Situation du portefeuille** (estimations pour un portefeuille de 100 000 clients au taux de churn supposé de 2 %) :\n- **2 002** départs attendus sur un mois ;\n- **116 162 $** de revenu mensuel en jeu (1,97 % de la facture) ;\n- clients **High** : **9 876** en équivalent portefeuille (17 472 clients dans la base), risque mensuel moyen **5,13 %** ;\n- campagne officielle (top 10 % des actifs) : **51,1** futurs churners pour 1 000 clients contactés, contre 20 au hasard.\n\nLes départs évités dépendent du taux de succès de l'offre, à mesurer.",
@@ -26,7 +26,7 @@
    "evaluated": true,
    "routing_ok": true,
    "numbers_ok": true,
-   "seconds": 0.8
+   "seconds": 1.0
   },
   {
    "id": "F2",
@@ -40,7 +40,7 @@
     {
      "name": "get_kpis",
      "args": {},
-     "ms": 139.6
+     "ms": 93.2
     }
    ],
    "answer": "**Situation du portefeuille** (estimations pour un portefeuille de 100 000 clients au taux de churn supposé de 2 %) :\n- **2 002** départs attendus sur un mois ;\n- **116 162 $** de revenu mensuel en jeu (1,97 % de la facture) ;\n- clients **High** : **9 876** en équivalent portefeuille (17 472 clients dans la base), risque mensuel moyen **5,13 %** ;\n- campagne officielle (top 10 % des actifs) : **51,1** futurs churners pour 1 000 clients contactés, contre 20 au hasard.\n\nLes départs évités dépendent du taux de succès de l'offre, à mesurer.",
@@ -67,7 +67,7 @@
       ],
       "limit": 5
      },
-     "ms": 12.9
+     "ms": 8.6
     }
    ],
    "answer": "**Clients à contacter en priorité** (17 472 clients High dans la base ; voici les plus risqués) :\n- **1073773** : risque mensuel **29,95 %**, Évolution de l'usage non mesurée → *Offre adaptée à l'usage*\n- **1053621** : risque mensuel **27,23 %**, Évolution de l'usage non mesurée → *Offre adaptée à l'usage*\n- **1088175** : risque mensuel **25,25 %**, Évolution de l'usage non mesurée → *Offre adaptée à l'usage*\n- **1060314** : risque mensuel **24,63 %**, Usage en baisse de 87 % (3 derniers mois contre 6 mois) → *Offre adaptée à l'usage*\n- **1083660** : risque mensuel **24,22 %**, Usage en baisse de 99 % (3 derniers mois contre 6 mois) → *Offre adaptée à l'usage*\n\nLes raisons décrivent ce qui pèse sur le score selon le modèle, pas des causes.",
@@ -91,7 +91,7 @@
      "args": {
       "dimension": "cluster"
      },
-     "ms": 66.8
+     "ms": 103.5
     }
    ],
    "answer": "**Segments les plus risqués** (estimations au taux de churn supposé de 2 %) :\n- **Clients anciens à terminal ancien et bon marché** : risque mensuel **2,69 %**, 16,1 % de clients High, 17,0 % du revenu en jeu\n- **Lignes secondaires à petit forfait** : risque mensuel **2,51 %**, 11,1 % de clients High, 3,1 % du revenu en jeu\n- **Gros consommateurs en baisse d'usage** : risque mensuel **1,96 %**, 10,6 % de clients High, 31,7 % du revenu en jeu\n\nEn revenu, le segment **Gros consommateurs en baisse d'usage** pèse le plus : **31,7 %** du revenu en jeu.",
@@ -100,7 +100,7 @@
    "evaluated": true,
    "routing_ok": true,
    "numbers_ok": true,
-   "seconds": 0.1
+   "seconds": 0.2
   },
   {
    "id": "F5",
@@ -115,7 +115,7 @@
      "args": {
       "customer_id": 1072931
      },
-     "ms": 2.2
+     "ms": 2.8
     }
    ],
    "answer": "**Client 1072931** : niveau **High**, risque mensuel **6,40 %** (taux de churn réel supposé de 2 %).\n\nSelon le modèle, les facteurs actionnables qui pèsent le plus :\n- Fin d'engagement : 12 mois d'ancienneté (augmente le risque)\n- Terminal à 30 $ (augmente le risque)\n- Minutes d'appel : 55 par mois (augmente le risque)\n\nAction suggérée : **Offre de réengagement**. Ce sont des associations apprises, pas des causes prouvées du départ.",
@@ -140,7 +140,7 @@
       "capacity_pct": 5.0,
       "success_rate": 0.3
      },
-     "ms": 159.7
+     "ms": 115.7
     }
    ],
    "answer": "**Campagne sur 5 % du portefeuille** (5 001 clients en équivalent portefeuille, taux de churn supposé 2 %) :\n- **308** churners attendus parmi les ciblés, contre 100 au hasard (facteur 3,08) ;\n- **17 748 $** de revenu mensuel en jeu ;\n- *Hypothèse* d'un taux de succès de 30 % : environ **92** départs évités et **5 324 $** de revenu mensuel préservé.\n\nLe taux de succès est une hypothèse à mesurer (groupe témoin) ; aucun coût n'a été supposé.",
@@ -149,7 +149,7 @@
    "evaluated": true,
    "routing_ok": true,
    "numbers_ok": true,
-   "seconds": 0.2
+   "seconds": 0.1
   },
   {
    "id": "X1",
@@ -189,7 +189,7 @@
      "args": {
       "top": 5
      },
-     "ms": 84.1
+     "ms": 71.8
     }
    ],
    "answer": "**Principaux facteurs actionnables, selon le modèle** :\n- **Âge du terminal** (Terminal) : 11,7 % de l'importance\n- **Évolution de l'usage** (Usage) : 7,2 % de l'importance\n- **Minutes d'appel par mois** (Usage) : 4,6 % de l'importance\n\nCe sont des associations apprises par le modèle (SHAP), pas des causes : agir sur un facteur ne garantit pas de réduire le risque.",
@@ -213,7 +213,7 @@
      "args": {
       "topic": "auc"
      },
-     "ms": 81.4
+     "ms": 121.9
     }
    ],
    "answer": "L'AUC est la probabilité qu'un churner tiré au hasard ait un score plus élevé qu'un non-churner tiré au hasard (0,5 = hasard, 1 = parfait). Le modèle final (LightGBM calibré) obtient 0,6955 sur le jeu de test, qui n'a servi à aucun choix de modèle, et 0,6941 en validation hors fold sur le train. C'est un bon classement pour ce jeu où chaque variable, seule, est peu liée au churn.",
@@ -237,7 +237,7 @@
      "args": {
       "topic": "chiffre_51"
      },
-     "ms": 67.1
+     "ms": 78.2
     }
    ],
    "answer": "En ciblant les 10 % de clients actifs les plus risqués, on atteint environ 51 futurs churners pour 1 000 clients contactés, contre 20 au hasard (taux réel supposé de 2 %). Les inactifs sont traités à part. Le chiffre de 56 pour 1 000 mesurait la performance du modèle, inactifs compris. Les départs évités dépendent du taux de succès de l'offre, à mesurer.",
@@ -303,14 +303,14 @@
     {
      "name": "get_kpis",
      "args": {},
-     "ms": 58.8
+     "ms": 138.2
     },
     {
      "name": "explain_method",
      "args": {
       "topic": "departs_evites"
      },
-     "ms": 62.7
+     "ms": 122.1
     }
    ],
    "answer": "**On ne peut pas le savoir avec le modèle seul.** Il indique *qui* risque de partir, pas si l'offre le retiendra.\n- Ce qu'on sait : en ciblant le top 10 % des actifs, on atteint environ **51,1** futurs churners pour 1 000 clients contactés, contre 20 au hasard ;\n- départs évités = churners ciblés × **taux de succès de l'offre**, inconnu tant qu'il n'est pas mesuré (groupe témoin).\n\nLe simulateur de campagne permet de tester un taux de succès, présenté comme hypothèse.",
@@ -319,7 +319,7 @@
    "evaluated": true,
    "routing_ok": true,
    "numbers_ok": true,
-   "seconds": 0.1
+   "seconds": 0.3
   },
   {
    "id": "P2",
@@ -334,14 +334,14 @@
     {
      "name": "get_kpis",
      "args": {},
-     "ms": 62.4
+     "ms": 82.9
     },
     {
      "name": "explain_method",
      "args": {
       "topic": "departs_evites"
      },
-     "ms": 69.0
+     "ms": 70.5
     }
    ],
    "answer": "**On ne peut pas le savoir avec le modèle seul.** Il indique *qui* risque de partir, pas si l'offre le retiendra.\n- Ce qu'on sait : en ciblant le top 10 % des actifs, on atteint environ **51,1** futurs churners pour 1 000 clients contactés, contre 20 au hasard ;\n- départs évités = churners ciblés × **taux de succès de l'offre**, inconnu tant qu'il n'est pas mesuré (groupe témoin).\n\nLe simulateur de campagne permet de tester un taux de succès, présenté comme hypothèse.",
@@ -350,7 +350,7 @@
    "evaluated": true,
    "routing_ok": true,
    "numbers_ok": true,
-   "seconds": 0.1
+   "seconds": 0.2
   }
  ]
 }

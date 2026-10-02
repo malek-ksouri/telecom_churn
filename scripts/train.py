@@ -3,7 +3,8 @@
 Le modèle final (``models.final``) et ses paramètres sont lus dans ``configs/config.yaml``.
 Le jeu de test n'est jamais lu ici. Sorties : ``models/pipeline.joblib`` (modèle brut),
 ``models/final_model.joblib`` (modèle calibré + taux réel, si ``models.calibration`` est
-défini) et ``models/model_card.md``.
+défini), ``models/segmentation.joblib`` (segments K-means du notebook 02b, refaits à
+l'identique) et ``models/model_card.md``.
 """
 
 from __future__ import annotations
@@ -21,6 +22,7 @@ from churn.logging_setup import setup_logging
 from churn.models.factory import build_pipeline
 from churn.models.final import FinalChurnModel
 from churn.models.model_card import write_model_card
+from churn.segmentation import kmeans as km
 
 logger = logging.getLogger("train")
 
@@ -62,6 +64,11 @@ def main() -> int:
         print(f"modèle final calibré : {final_path}")
     else:
         logger.warning("models.calibration vide : pas de modèle calibré (E10).")
+
+    # Segmentation descriptive (notebook 02b) : sans la cible, sur le train seul. Nécessaire à
+    # `make artifacts` dans un clone neuf (les .joblib ne sont pas versionnés).
+    bundle = km.fit_segmentation(train.drop(columns=[cfg.data.target]), km.N_CLUSTERS)
+    print(f"segmentation : {km.save_segmentation(bundle)}")
 
     card_path = write_model_card(n_train=len(train))
     print(f"fiche : {card_path}")
